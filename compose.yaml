@@ -1,0 +1,120 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        VERSION: ${VERSION:-dev}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      uploads-permissions:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: postgres://player:${POSTGRES_PASSWORD:?run ./install.sh}@postgres:5432/player?sslmode=disable
+      MUSIC_DIR: /music
+      UPLOADS_DIR: /uploads
+      DATA_DIR: /data
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?run ./install.sh}
+      APP_SECRET: ${APP_SECRET:-}
+      SCAN_INTERVAL: ${SCAN_INTERVAL:-15m}
+      BACKUP_INTERVAL: ${BACKUP_INTERVAL:-24h}
+      UPDATE_REPOSITORY: ${UPDATE_REPOSITORY:-}
+      PUBLIC_URL: ${PUBLIC_URL:-http://localhost:8080}
+      SECURE_COOKIES: ${SECURE_COOKIES:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      YANDEX_CLIENT_ID: ${YANDEX_CLIENT_ID:-}
+      YANDEX_CLIENT_SECRET: ${YANDEX_CLIENT_SECRET:-}
+      DROPBOX_CLIENT_ID: ${DROPBOX_CLIENT_ID:-}
+      DROPBOX_CLIENT_SECRET: ${DROPBOX_CLIENT_SECRET:-}
+      ONEDRIVE_CLIENT_ID: ${ONEDRIVE_CLIENT_ID:-}
+      ONEDRIVE_CLIENT_SECRET: ${ONEDRIVE_CLIENT_SECRET:-}
+      TZ: ${TZ:-Europe/Moscow}
+    ports:
+      - "${APP_BIND:-0.0.0.0}:${PORT:-8080}:8080"
+    volumes:
+      - ${MUSIC_PATH:-./music}:/music:rw
+      - ${UPLOADS_PATH:-./uploads}:/uploads:rw
+      - player-data:/data
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,noexec,nosuid
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: player
+      POSTGRES_USER: player
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?run ./install.sh}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      options:
+        max-size: 10m
+        max-file: "3"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U player -d player"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  uploads-permissions:
+    image: postgres:17-alpine
+    user: "0:0"
+    entrypoint: ["sh", "-c"]
+    command: ["chown 10001:10001 /music /uploads && chmod 750 /music /uploads"]
+    volumes:
+      - ${MUSIC_PATH:-./music}:/music:rw
+      - ${UPLOADS_PATH:-./uploads}:/uploads:rw
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - FOWNER
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["domain"]
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      DOMAIN: ${DOMAIN:-localhost}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  postgres-data:
+  player-data:
+  caddy-data:
+  caddy-config:

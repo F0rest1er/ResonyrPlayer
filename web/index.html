@@ -1,0 +1,323 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#6d5dfc">
+  <title>Resonyr</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body class="page">
+  <main class="login" id="login" hidden>
+    <form class="login__form glass" id="loginForm">
+      <div class="brand login__brand"><span class="brand__mark"><i></i><i></i><i></i></span><span class="brand__name">Resonyr</span></div>
+      <h1 class="login__title">Ваша музыка. Ваш сервер.</h1>
+      <label class="field">
+        <span class="field__label">Логин</span>
+        <input class="field__input" name="username" autocomplete="username" required>
+      </label>
+      <label class="field">
+        <span class="field__label">Пароль</span>
+        <input class="field__input" type="password" name="password" autocomplete="current-password" required>
+      </label>
+      <p class="login__error" id="loginError" role="alert"></p>
+      <button class="button button--primary" type="submit">Войти</button>
+    </form>
+  </main>
+
+  <div class="app" id="app" hidden>
+    <aside class="sidebar glass">
+      <div class="brand sidebar__brand"><span class="brand__mark"><i></i><i></i><i></i></span><span class="brand__name">Resonyr</span></div>
+      <nav class="nav" aria-label="Основная навигация">
+        <button class="nav__item nav__item--active" data-action="home" aria-label="Медиатека" title="Медиатека"><svg class="nav__icon" viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v9H6v-9"/><path d="M10 20v-6h4v6"/></svg><span class="nav__label">Медиатека</span></button>
+        <button class="nav__item" data-action="favorites" aria-label="Избранное" title="Избранное"><svg class="nav__icon" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></svg><span class="nav__label">Избранное</span></button>
+        <button class="nav__item" data-action="playlists" aria-label="Плейлисты" title="Плейлисты"><svg class="nav__icon" viewBox="0 0 24 24"><path d="M4 6h11M4 12h11M4 18h7"/><path d="M19 11v8m-3-5h6"/></svg><span class="nav__label">Плейлисты</span></button>
+        <button class="nav__item" data-action="history" aria-label="История" title="История"><svg class="nav__icon" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></svg><span class="nav__label">История</span></button>
+        <button class="nav__item" data-action="notifications" aria-label="Уведомления" title="Уведомления"><svg class="nav__icon" viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span class="nav__label">Уведомления</span></button>
+        <button class="nav__item" data-action="releases" aria-label="Новинки" title="Новинки"><svg class="nav__icon" viewBox="0 0 24 24"><path d="m12 3 1.5 4.2L18 9l-4.5 1.8L12 15l-1.5-4.2L6 9l4.5-1.8L12 3Z"/><path d="m19 15 .7 2.3L22 18l-2.3.7L19 21l-.7-2.3L16 18l2.3-.7L19 15ZM5 3l.6 1.6L7 5l-1.4.4L5 7l-.6-1.6L3 5l1.4-.4L5 3Z"/></svg><span class="nav__label">Новинки</span></button>
+        <button class="nav__item" data-action="admin" id="adminButton" aria-label="Пользователи" title="Пользователи" hidden><svg class="nav__icon" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c.8-4 3.5-6 8-6s7.2 2 8 6"/></svg><span class="nav__label">Пользователи</span></button>
+        <button class="nav__item" data-action="sources" id="sourcesButton" aria-label="Источники" title="Источники" hidden><svg class="nav__icon" viewBox="0 0 24 24"><path d="M4 7c0-2 3.6-4 8-4s8 2 8 4-3.6 4-8 4-8-2-8-4Z"/><path d="M4 7v5c0 2 3.6 4 8 4s8-2 8-4V7M4 12v5c0 2 3.6 4 8 4s8-2 8-4v-5"/></svg><span class="nav__label">Источники</span></button>
+        <button class="nav__item" data-action="files" id="filesButton" aria-label="Файлы" title="Файлы" hidden><svg class="nav__icon" viewBox="0 0 24 24"><path d="M3 6h7l2 2h9v11H3V6Z"/><path d="M3 10h18"/></svg><span class="nav__label">Файлы</span></button>
+        <button class="nav__item" data-action="operations" id="operationsButton" aria-label="Система" title="Система" hidden><svg class="nav__icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 14.5a2 2 0 0 0 .4 2.2l.1.1-2.7 2.7-.1-.1a2 2 0 0 0-2.2-.4 2 2 0 0 0-1.3 1.8V21H9.4v-.2A2 2 0 0 0 8 19a2 2 0 0 0-2.2.4l-.1.1L3 16.8l.1-.1a2 2 0 0 0 .4-2.2A2 2 0 0 0 1.7 13h-.2V9.3h.2A2 2 0 0 0 3.5 8a2 2 0 0 0-.4-2.2L3 5.7 5.7 3l.1.1A2 2 0 0 0 8 3.5a2 2 0 0 0 1.4-1.8v-.2h3.8v.2a2 2 0 0 0 1.3 1.8 2 2 0 0 0 2.2-.4l.1-.1 2.7 2.7-.1.1A2 2 0 0 0 19 8a2 2 0 0 0 1.8 1.3h.2V13h-.2a2 2 0 0 0-1.8 1.5Z"/></svg><span class="nav__label">Система</span></button>
+      </nav>
+      <div class="sidebar__footer">
+        <a class="nav__item" id="supportLink" href="https://dalink.to/forestier" target="_blank" rel="noopener noreferrer" aria-label="Поддержать проект" title="Поддержать проект"><svg class="nav__icon" viewBox="0 0 24 24"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1.1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8Z"/></svg><span class="nav__label">Поддержать</span></a>
+        <button class="nav__item" id="scanButton" aria-label="Сканировать" title="Сканировать" hidden><svg class="nav__icon" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18 6l2 6M17.9 15A7 7 0 0 1 6 18l-2-6"/></svg><span class="nav__label">Сканировать</span></button>
+        <button class="nav__item" id="logoutButton" aria-label="Выйти" title="Выйти"><svg class="nav__icon" viewBox="0 0 24 24"><path d="M10 5H5v14h5M14 8l4 4-4 4M8 12h10"/></svg><span class="nav__label">Выйти</span></button>
+      </div>
+    </aside>
+
+    <section class="content">
+      <header class="toolbar">
+        <button class="icon-button toolbar__menu" id="menuButton" aria-label="Открыть меню">☰</button>
+        <div class="search">
+          <span class="search__icon" aria-hidden="true"></span>
+          <input class="search__input" id="searchInput" type="search" placeholder="Треки, исполнители, альбомы" aria-label="Поиск">
+        </div>
+        <select class="control-select toolbar__theme" id="colorModeSelect" aria-label="Режим яркости"><option value="system">Режим: системный</option><option value="light">Режим: светлый</option><option value="dark">Режим: тёмный</option></select>
+        <select class="control-select toolbar__theme" id="themeSelect" aria-label="Оформление"></select>
+        <button class="toolbar__user" id="accountButton" type="button" title="Настройки аккаунта"><span id="username"></span></button>
+      </header>
+
+      <aside class="update-banner" id="updateBanner" hidden><span id="updateBannerText"></span><a class="button button--primary" id="updateBannerLink" target="_blank" rel="noopener noreferrer">Открыть релиз</a></aside>
+
+      <div class="library">
+        <p class="offline-status" id="offlineStatus" role="status" aria-live="polite" hidden></p>
+        <div class="library__heading">
+          <div>
+            <div class="breadcrumbs" id="breadcrumbs"></div>
+            <h1 class="library__title" id="libraryTitle">Медиатека</h1>
+            <p class="library__description" id="libraryDescription" hidden></p>
+          </div>
+          <div class="library__actions">
+            <label class="select"><span class="select__label">Формат</span><select class="select__input" id="formatSelect"><option value="">Все</option><option>FLAC</option><option>MP3</option><option>AAC</option><option>M4A</option><option>OGG</option><option>OPUS</option><option>WAV</option></select></label>
+            <label class="select"><span class="select__label">Сортировка</span><select class="select__input" id="sortSelect"><option value="">По папкам</option><option value="artist">Исполнитель</option><option value="album">Альбом</option><option value="title">Название</option><option value="year">Год</option></select></label>
+            <label class="select" id="playlistLayoutControl" hidden><span class="select__label">Вид</span><select class="select__input" id="playlistLayoutSelect"><option value="grid">Плитка</option><option value="list">Список</option></select></label>
+            <button class="button" id="newPlaylistButton" hidden>＋ Плейлист</button>
+            <button class="button" id="editPlaylistButton" hidden>Редактировать</button>
+            <button class="button" id="removePlaylistDownloadsButton" hidden>Удалить загрузки плейлиста</button>
+            <button class="button" id="clearDownloadsButton" hidden>Удалить все загрузки</button>
+            <button class="button" id="uploadMusicButton" hidden>↑ Музыка</button>
+            <button class="button" id="newUserButton" hidden>＋ Пользователь</button>
+            <button class="button" id="uploadThemeButton" hidden>↑ Тема</button>
+            <button class="button" id="newSourceButton" hidden>＋ Источник</button>
+            <button class="button" id="newFolderButton" hidden>＋ Папка</button>
+            <button class="button" id="uploadFilesButton" hidden>↑ Загрузить</button>
+            <button class="button" id="uploadFolderButton" hidden>↑ Папку</button>
+            <button class="button" id="watchArtistButton" hidden>＋ Исполнитель</button>
+            <button class="button" id="newBackupButton" hidden>Создать копию</button>
+            <button class="button" id="deletePlaylistButton" hidden>Удалить</button>
+            <button class="button" id="clearNotificationsButton" hidden>Очистить</button>
+            <button class="button" id="enablePushButton" hidden>Включить push</button>
+            <button class="button button--primary" id="playFolderButton">▶ Слушать всё</button>
+          </div>
+        </div>
+        <div class="folders" id="folders"></div>
+        <div class="file-dropzone" id="fileDropzone" hidden tabindex="0"><strong class="file-dropzone__title">Перетащите сюда музыку или папку</strong><span class="file-dropzone__text">Структура вложенных папок сохранится</span></div>
+        <input id="folderInput" type="file" webkitdirectory directory multiple hidden>
+        <div class="tracks" id="tracks"></div>
+        <div class="empty" id="empty" hidden>
+          <span class="empty__icon">♫</span>
+          <h2 class="empty__title" id="emptyTitle">Здесь пока нет музыки</h2>
+          <p class="empty__text" id="emptyText">Добавьте аудиофайлы в папку music и запустите сканирование.</p>
+        </div>
+      </div>
+    </section>
+
+    <footer class="player glass">
+      <div class="player__track">
+        <div class="cover">
+          <picture class="cover__picture"><img class="cover__image" id="coverImage" alt="" hidden></picture>
+          <span class="cover__placeholder" id="coverPlaceholder">♫</span>
+        </div>
+        <div class="player__meta">
+          <strong class="player__title" id="playerTitle">Ничего не играет</strong>
+          <span class="player__artist" id="playerArtist">Выберите композицию</span>
+        </div>
+      </div>
+      <div class="player__center">
+        <div class="player__controls">
+          <button class="icon-button" id="shuffleButton" aria-label="Перемешать"><svg class="icon-button__icon" viewBox="0 0 24 24"><path d="M16 3h5v5M4 20 21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></button>
+          <button class="icon-button" id="previousButton" aria-label="Предыдущий трек">◀</button>
+          <button class="play-button" id="playButton" aria-label="Воспроизвести">▶</button>
+          <button class="icon-button" id="nextButton" aria-label="Следующий трек">▶</button>
+          <button class="icon-button" id="repeatButton" aria-label="Повтор">↻</button>
+        </div>
+        <div class="progress">
+          <span class="progress__time" id="currentTime">0:00</span>
+          <input class="progress__range" id="progressRange" type="range" min="0" max="100" value="0" aria-label="Позиция">
+          <span class="progress__time" id="duration">0:00</span>
+        </div>
+      </div>
+      <div class="player__right">
+        <label class="device-picker"><span class="device-picker__status"></span><select class="control-select device-picker__select" id="deviceSelect" aria-label="Устройство воспроизведения"></select></label>
+        <div class="volume">
+          <button class="volume__button" id="volumeButton" type="button" aria-label="Выключить звук"><svg class="volume__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 10v4h4l5 4V6l-5 4H4Z"/><path id="volumeWaveSmall" d="M16 9a4 4 0 0 1 0 6"/><path id="volumeWaveLarge" d="M18.5 6.5a8 8 0 0 1 0 11"/></svg></button>
+          <input class="volume__range" id="volumeRange" type="range" min="0" max="1" step="0.01" value="0.8" aria-label="Громкость">
+        </div>
+      </div>
+      <audio id="audio" preload="metadata"></audio>
+    </footer>
+  </div>
+
+  <dialog class="modal" id="playlistModal">
+    <form class="modal__content" id="playlistForm">
+      <h2 class="modal__title" id="playlistModalTitle">Новый плейлист</h2>
+      <input name="id" type="hidden">
+      <label class="field"><span class="field__label">Название</span><input class="field__input" name="name" maxlength="100" required></label>
+      <label class="field"><span class="field__label">Описание</span><textarea class="field__input field__input--text-area" name="description" maxlength="500" rows="4" placeholder="О чём этот плейлист"></textarea></label>
+      <label class="field">
+        <span class="field__label">Обложка</span>
+        <span class="cover-upload" id="playlistCoverDropzone">
+          <input class="cover-upload__input" id="playlistCoverInput" name="cover" type="file" accept="image/jpeg,image/png">
+          <picture class="cover-upload__picture" id="playlistCoverPicture" hidden><img class="cover-upload__image" id="playlistCoverPreview" alt="Предпросмотр обложки"></picture>
+          <span class="cover-upload__prompt" id="playlistCoverPrompt"><svg class="cover-upload__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M5 14v5h14v-5"/></svg><strong>Перетащите обложку сюда</strong><small>или нажмите, чтобы выбрать JPEG или PNG</small></span>
+        </span>
+      </label>
+      <p class="login__error" data-form-error role="alert"></p>
+      <div class="modal__actions"><button class="button" type="button" data-close="playlistModal">Отмена</button><button class="button button--primary" id="playlistSubmitButton" type="submit">Создать</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal modal--wide" id="trackMetadataModal">
+    <form class="modal__content" id="trackMetadataForm">
+      <h2 class="modal__title">Данные трека</h2>
+      <input name="id" type="hidden">
+      <div class="metadata-form">
+        <label class="field metadata-form__wide"><span class="field__label">Название</span><input class="field__input" name="title" maxlength="300" required></label>
+        <label class="field metadata-form__wide"><span class="field__label">Исполнители</span><input class="field__input" name="artists" maxlength="500" placeholder="Через точку с запятой"></label>
+        <label class="field"><span class="field__label">Альбом</span><input class="field__input" name="album" maxlength="300"></label>
+        <label class="field"><span class="field__label">Исполнитель альбома</span><input class="field__input" name="albumArtist" maxlength="300"></label>
+        <label class="field"><span class="field__label">Год</span><input class="field__input" name="year" type="number" min="0" max="9999"></label>
+        <label class="field"><span class="field__label">Номер трека</span><input class="field__input" name="trackNumber" type="number" min="0" max="9999"></label>
+        <label class="field"><span class="field__label">Номер диска</span><input class="field__input" name="discNumber" type="number" min="0" max="999"></label>
+        <label class="field"><span class="field__label">Жанр</span><input class="field__input" name="genre" maxlength="200"></label>
+        <label class="field metadata-form__wide"><span class="field__label">Композитор</span><input class="field__input" name="composer" maxlength="300"></label>
+        <label class="field metadata-form__wide"><span class="field__label">Комментарий</span><textarea class="field__input field__input--text-area" name="comment" maxlength="4000" rows="3"></textarea></label>
+      </div>
+      <label class="field">
+        <span class="field__label">Обложка</span>
+        <span class="cover-upload" id="trackCoverDropzone">
+          <input class="cover-upload__input" id="trackCoverInput" name="cover" type="file" accept="image/jpeg,image/png">
+          <picture class="cover-upload__picture" id="trackCoverPicture" hidden><img class="cover-upload__image" id="trackCoverPreview" alt="Предпросмотр обложки"></picture>
+          <span class="cover-upload__prompt" id="trackCoverPrompt"><svg class="cover-upload__icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M5 14v5h14v-5"/></svg><strong>Перетащите обложку сюда</strong><small>или нажмите, чтобы выбрать JPEG или PNG</small></span>
+        </span>
+      </label>
+      <button class="button metadata-form__remove-cover" id="trackCoverRemoveButton" type="button">Удалить обложку</button>
+      <p class="modal__text" id="trackTechnicalInfo"></p>
+      <p class="modal__text">Изменения сохраняются в каталоге Resonyr. Оригинальный локальный или облачный файл не меняется.</p>
+      <p class="login__error" data-form-error role="alert"></p>
+      <div class="modal__actions"><button class="button" type="button" data-close="trackMetadataModal">Отмена</button><button class="button button--primary" type="submit">Сохранить</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="musicModal">
+    <form class="modal__content" id="musicForm">
+      <h2 class="modal__title">Загрузить музыку</h2>
+      <p class="modal__text">Файлы сохранятся в папке music на сервере и сразу появятся в медиатеке.</p>
+      <input id="musicPath" type="hidden">
+      <label class="field"><span class="field__label">Аудиофайлы, до 1 ГБ каждый</span><input class="field__input field__input--file" name="files" type="file" accept="audio/*,.flac,.m4a,.opus" multiple required></label>
+      <p class="login__error" data-form-error role="alert"></p>
+      <div class="modal__actions"><button class="button" type="button" data-close="musicModal">Отмена</button><button class="button button--primary">Загрузить</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="folderModal">
+    <form class="modal__content" id="folderForm">
+      <h2 class="modal__title">Новая папка</h2>
+      <label class="field"><span class="field__label">Название</span><input class="field__input" name="name" maxlength="240" required></label>
+      <p class="login__error" data-form-error role="alert"></p>
+      <div class="modal__actions"><button class="button" type="button" data-close="folderModal">Отмена</button><button class="button button--primary">Создать</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="renameFileModal">
+    <form class="modal__content" id="renameFileForm">
+      <h2 class="modal__title">Переименовать</h2>
+      <input name="path" type="hidden">
+      <label class="field"><span class="field__label">Новое название</span><input class="field__input" name="name" maxlength="240" required></label>
+      <p class="login__error" data-form-error role="alert"></p>
+      <div class="modal__actions"><button class="button" type="button" data-close="renameFileModal">Отмена</button><button class="button button--primary">Сохранить</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="userModal">
+    <form class="modal__content" id="userForm">
+      <h2 class="modal__title">Новый пользователь</h2>
+      <label class="field"><span class="field__label">Логин</span><input class="field__input" name="username" minlength="3" required></label>
+      <label class="field"><span class="field__label">Пароль</span><input class="field__input" name="password" type="password" minlength="8" required></label>
+      <label class="checkbox"><input name="isAdmin" type="checkbox"> Администратор</label>
+      <div class="modal__actions"><button class="button" type="button" data-close="userModal">Отмена</button><button class="button button--primary">Создать</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="addTrackModal">
+    <div class="modal__content">
+      <h2 class="modal__title">Добавить в плейлист</h2>
+      <div class="modal__list" id="playlistChoices"></div>
+      <div class="modal__actions"><button class="button" type="button" data-close="addTrackModal">Закрыть</button></div>
+    </div>
+  </dialog>
+
+  <dialog class="modal" id="themeModal">
+    <form class="modal__content" id="themeForm">
+      <h2 class="modal__title">Загрузить тему</h2>
+      <p class="modal__text">Режим меняет только светлую/тёмную палитру. Тема — ZIP-пакет полного оформления.</p>
+      <details class="theme-guide"><summary class="theme-guide__summary">Как создать свою тему</summary><div class="theme-guide__content">
+        <p>Положите в корень ZIP файлы:</p><pre class="theme-guide__code">manifest.json
+theme.css
+preview.png (необязательно)
+assets/ (необязательно)</pre>
+        <p><code>manifest.json</code>:</p><pre class="theme-guide__code">{"id":"my-theme","name":"Моя тема","version":"1.0.0","author":"Имя"}</pre>
+        <p>В <code>theme.css</code> переопределяйте <code>--background</code>, <code>--surface</code>, <code>--text</code>, <code>--muted</code>, <code>--line</code>, <code>--accent</code>, <code>--accent-hover</code>, <code>--accent-soft</code>, <code>--secondary</code> и <code>--shadow</code>. ID — строчные латинские буквы, цифры и дефисы. Внешние URL и <code>@import</code> запрещены; ресурсы храните в <code>assets/</code>.</p>
+      </div></details>
+      <label class="field"><span class="field__label">ZIP-пакет</span><input class="field__input field__input--file" name="theme" type="file" accept=".zip,application/zip" required></label>
+      <div class="modal__actions"><button class="button" type="button" data-close="themeModal">Отмена</button><button class="button button--primary">Загрузить</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="accountModal">
+    <form class="modal__content" id="accountForm">
+      <h2 class="modal__title">Настройки аккаунта</h2>
+      <label class="field"><span class="field__label">Логин</span><input class="field__input" name="username" minlength="3" maxlength="64" autocomplete="username" required></label>
+      <label class="field"><span class="field__label">Текущий пароль</span><input class="field__input" name="currentPassword" type="password" minlength="8" maxlength="72" autocomplete="current-password" required></label>
+      <label class="field"><span class="field__label">Новый пароль</span><input class="field__input" name="newPassword" type="password" minlength="8" maxlength="72" autocomplete="new-password" placeholder="Оставьте пустым, чтобы не менять"></label>
+      <p class="login__error" data-form-error role="alert"></p>
+      <div class="modal__actions"><button class="button" type="button" data-close="accountModal">Отмена</button><button class="button button--primary">Сохранить</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal" id="editUserModal">
+    <form class="modal__content" id="editUserForm">
+      <h2 class="modal__title">Изменить пользователя</h2>
+      <input name="id" type="hidden">
+      <label class="field"><span class="field__label">Логин</span><input class="field__input" name="username" minlength="3" maxlength="64" required></label>
+      <label class="field"><span class="field__label">Новый пароль</span><input class="field__input" name="password" type="password" minlength="8" maxlength="72" placeholder="Оставьте пустым, чтобы не менять"></label>
+      <p class="login__error" data-form-error role="alert"></p>
+      <div class="modal__actions"><button class="button" type="button" data-close="editUserModal">Отмена</button><button class="button button--primary">Сохранить</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal modal--wide" id="sourceModal">
+    <form class="modal__content" id="sourceForm">
+      <h2 class="modal__title">Облачный источник</h2>
+      <label class="field"><span class="field__label">Название</span><input class="field__input" name="name" maxlength="64" placeholder="Семейная музыка" required></label>
+      <label class="field"><span class="field__label">Провайдер</span><select class="field__input" id="sourceProvider" name="provider"><option value="google-drive">Google Drive</option><option value="yandex-disk">Яндекс Диск</option><option value="dropbox">Dropbox</option><option value="onedrive">OneDrive</option></select></label>
+      <label class="field"><span class="field__label">Путь внутри хранилища</span><input class="field__input" name="remotePath" maxlength="500" placeholder="Music"></label>
+      <label class="field"><span class="field__label">OAuth Client ID</span><input class="field__input" name="clientId" maxlength="512" autocomplete="off" placeholder="Нужен только при первом подключении"></label>
+      <label class="field"><span class="field__label">OAuth Client Secret</span><input class="field__input" name="clientSecret" type="password" maxlength="2048" autocomplete="new-password" placeholder="Хранится в зашифрованном виде"></label>
+      <p class="modal__text">После нажатия вы перейдёте на страницу выбранного сервиса и вернётесь в Resonyr после подтверждения доступа.</p>
+      <p class="login__error" data-form-error role="alert"></p>
+      <div class="modal__actions"><button class="button" type="button" data-close="sourceModal">Отмена</button><button class="button button--primary">Подключить</button></div>
+    </form>
+  </dialog>
+
+  <dialog class="modal donation" id="donationModal" aria-labelledby="donationTitle">
+    <div class="modal__content donation__content">
+      <div class="donation__icon" aria-hidden="true">♥</div>
+      <h2 class="modal__title donation__title" id="donationTitle">Поддержать Resonyr</h2>
+      <p class="modal__text">Если сервис оказался полезным, вы можете поддержать дальнейшую разработку.</p>
+      <div class="donation__actions">
+        <button class="button donation__later" id="donationLaterButton" type="button" autofocus>Позже</button>
+        <a class="button button--primary donation__link" href="https://dalink.to/forestier" target="_blank" rel="noopener noreferrer">Поддержать</a>
+        <button class="donation__dismiss" id="donationNeverButton" type="button">Не напоминать больше</button>
+      </div>
+    </div>
+  </dialog>
+
+  <dialog class="modal" id="artistModal">
+    <form class="modal__content" id="artistForm">
+      <h2 class="modal__title">Отслеживать исполнителя</h2>
+      <label class="field"><span class="field__label">Название</span><input class="field__input" name="name" maxlength="120" placeholder="Linkin Park" required></label>
+      <p class="login__error" data-form-error role="alert"></p>
+      <div class="artist-search" id="artistResults" aria-live="polite"></div>
+      <div class="modal__actions"><button class="button" type="button" data-close="artistModal">Отмена</button><button class="button button--primary">Найти</button></div>
+    </form>
+  </dialog>
+  <script src="/offline.js" defer></script>
+  <script src="/app.js" defer></script>
+</body>
+</html>

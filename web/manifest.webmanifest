@@ -1,0 +1,14 @@
+{
+  "name": "Resonyr",
+  "short_name": "Resonyr",
+  "description": "Self-hosted музыкальный плеер",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#11121a",
+  "theme_color": "#6d5dfc",
+  "orientation": "any",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
