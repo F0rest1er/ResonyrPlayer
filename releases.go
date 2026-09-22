@@ -321,7 +321,7 @@ func musicBrainzJSON(ctx context.Context, endpoint string, target any) error {
 		if err != nil {
 			return err
 		}
-		request.Header.Set("User-Agent", "Resonyr/0.1 ("+env("PUBLIC_URL", "self-hosted")+")")
+		request.Header.Set("User-Agent", "Resonyr/0.1 (https://github.com/F0rest1er/ResonyrPlayer)")
 		response, err := musicBrainzClient.Do(request)
 		musicBrainzLast = time.Now()
 		if err != nil {

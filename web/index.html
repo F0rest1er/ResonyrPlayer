@@ -8,6 +8,8 @@
   <title>Resonyr</title>
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="icon" href="/icon-32.png" type="image/png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/icon-180.png" sizes="180x180">
   <link rel="stylesheet" href="/style.css">
 </head>
 <body class="page">
@@ -29,7 +31,9 @@
   </main>
 
   <div class="app" id="app" hidden>
-    <aside class="sidebar glass">
+    <button class="sidebar__backdrop" id="sidebarBackdrop" aria-label="Закрыть меню" hidden></button>
+    <aside class="sidebar glass" id="sidebar">
+      <button class="icon-button sidebar__close" id="sidebarClose" aria-label="Закрыть меню">×</button>
       <div class="brand sidebar__brand"><span class="brand__mark"><i></i><i></i><i></i></span><span class="brand__name">Resonyr</span></div>
       <nav class="nav" aria-label="Основная навигация">
         <button class="nav__item nav__item--active" data-action="home" aria-label="Медиатека" title="Медиатека"><svg class="nav__icon" viewBox="0 0 24 24"><path d="M3 11 12 4l9 7v9H6v-9"/><path d="M10 20v-6h4v6"/></svg><span class="nav__label">Медиатека</span></button>
@@ -52,7 +56,7 @@
 
     <section class="content">
       <header class="toolbar">
-        <button class="icon-button toolbar__menu" id="menuButton" aria-label="Открыть меню">☰</button>
+        <button class="icon-button toolbar__menu" id="menuButton" aria-label="Открыть меню" aria-controls="sidebar" aria-expanded="false">☰</button>
         <div class="search">
           <span class="search__icon" aria-hidden="true"></span>
           <input class="search__input" id="searchInput" type="search" placeholder="Треки, исполнители, альбомы" aria-label="Поиск">
@@ -199,7 +203,7 @@
       <h2 class="modal__title">Загрузить музыку</h2>
       <p class="modal__text">Файлы сохранятся в папке music на сервере и сразу появятся в медиатеке.</p>
       <input id="musicPath" type="hidden">
-      <label class="field"><span class="field__label">Аудиофайлы, до 1 ГБ каждый</span><input class="field__input field__input--file" name="files" type="file" accept="audio/*,.flac,.m4a,.opus" multiple required></label>
+      <label class="field"><span class="field__label">Аудиофайлы, до 1 ГБ каждый</span><input class="field__input field__input--file" name="files" type="file" accept="audio/*,.mp3,.wav,.ogg,.aac,.flac,.m4a,.opus" multiple required></label>
       <p class="login__error" data-form-error role="alert"></p>
       <div class="modal__actions"><button class="button" type="button" data-close="musicModal">Отмена</button><button class="button button--primary">Загрузить</button></div>
     </form>
@@ -287,9 +291,11 @@ assets/ (необязательно)</pre>
       <label class="field"><span class="field__label">Название</span><input class="field__input" name="name" maxlength="64" placeholder="Семейная музыка" required></label>
       <label class="field"><span class="field__label">Провайдер</span><select class="field__input" id="sourceProvider" name="provider"><option value="google-drive">Google Drive</option><option value="yandex-disk">Яндекс Диск</option><option value="dropbox">Dropbox</option><option value="onedrive">OneDrive</option></select></label>
       <label class="field"><span class="field__label">Путь внутри хранилища</span><input class="field__input" name="remotePath" maxlength="500" placeholder="Music"></label>
+      <label class="field" id="sourceTokenField" hidden><span class="field__label">OAuth-токен Яндекс Диска</span><input class="field__input" name="accessToken" type="password" maxlength="4096" autocomplete="new-password" disabled></label>
+      <p class="modal__text" id="sourceTokenHelp" hidden>Получите токен с правом cloud_api:disk.read в Яндекс OAuth и вставьте сюда. Client Secret для этого способа не нужен. Токен хранится зашифрованным на вашем сервере; после его истечения источник нужно подключить заново.</p>
       <label class="field"><span class="field__label">OAuth Client ID</span><input class="field__input" name="clientId" maxlength="512" autocomplete="off" placeholder="Нужен только при первом подключении"></label>
       <label class="field"><span class="field__label">OAuth Client Secret</span><input class="field__input" name="clientSecret" type="password" maxlength="2048" autocomplete="new-password" placeholder="Хранится в зашифрованном виде"></label>
-      <p class="modal__text">После нажатия вы перейдёте на страницу выбранного сервиса и вернётесь в Resonyr после подтверждения доступа.</p>
+      <p class="modal__text">Google, Dropbox и OneDrive откроют страницу подтверждения доступа. Яндекс Диск подключается по токену. Используйте HTTPS, чтобы защитить учётные данные при передаче.</p>
       <p class="login__error" data-form-error role="alert"></p>
       <div class="modal__actions"><button class="button" type="button" data-close="sourceModal">Отмена</button><button class="button button--primary">Подключить</button></div>
     </form>

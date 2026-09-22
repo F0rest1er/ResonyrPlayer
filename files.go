@@ -229,6 +229,10 @@ func managedNameValid(value string) bool {
 }
 
 func (application *app) saveUploads(response http.ResponseWriter, request *http.Request, currentUser user, uploadDir string) {
+	if err := http.NewResponseController(response).SetReadDeadline(time.Now().Add(30 * time.Minute)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		writeError(response, http.StatusInternalServerError, "Не удалось подготовить загрузку")
+		return
+	}
 	request.Body = http.MaxBytesReader(response, request.Body, 100<<30)
 	reader, err := request.MultipartReader()
 	if err != nil {

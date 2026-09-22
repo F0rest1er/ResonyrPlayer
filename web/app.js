@@ -73,7 +73,7 @@ async function start() {
     await loadLibrary('');
     const sourceStatus = new URLSearchParams(location.search).get('source');
     if (sourceStatus) {
-      history.replaceState(null, '', location.pathname);
+      history.replaceState(history.state, '', location.pathname);
       if (sourceStatus === 'connected' && currentUser.isAdmin) {
         setActiveNavigation('sources');
         await loadSources();
@@ -255,7 +255,9 @@ async function loadSources() {
     sync.textContent = 'Синхронизировать';
     sync.addEventListener('click', async () => {
       sync.disabled = true;
-      try { await api(`/api/admin/sources/${item.id}/sync`, { method: 'POST' }); await loadSources(); } finally { sync.disabled = false; }
+      try { await api(`/api/admin/sources/${item.id}/sync`, { method: 'POST' }); await loadSources(); }
+      catch (error) { status.textContent = error.message; status.classList.add('source-row__status--error'); }
+      finally { sync.disabled = false; }
     });
     const remove = document.createElement('button');
     remove.className = 'user-row__delete';
@@ -273,6 +275,7 @@ async function loadFiles(path = '') {
   const data = await api(`/api/admin/files?path=${encodeURIComponent(path)}`);
   state.currentView = 'files';
   state.currentFilePath = data.path;
+  rememberNavigation('files', data.path);
   elements.libraryTitle.textContent = data.path.split('/').at(-1) || 'Локальные файлы';
   const root = makeFileBreadcrumb('Файлы', '');
   elements.breadcrumbs.replaceChildren(root);
@@ -637,12 +640,37 @@ function showLogin() {
   elements.login.hidden = false;
 }
 
+function setSidebarOpen(open) {
+  document.querySelector('.sidebar').classList.toggle('sidebar--open', open);
+  document.getElementById('sidebarBackdrop').hidden = !open;
+  elements.menuButton.setAttribute('aria-expanded', String(open));
+  if (!open && document.querySelector('.sidebar').contains(document.activeElement)) elements.menuButton.focus();
+}
+
 function setActiveNavigation(action) {
-  if (innerWidth <= 760) document.querySelector('.sidebar').classList.remove('sidebar--open');
+  if (action) rememberNavigation(action);
+  if (innerWidth <= 760) setSidebarOpen(false);
   document.querySelectorAll('[data-action]').forEach((item) => {
     item.classList.toggle('nav__item--active', item.dataset.action === action);
   });
 }
+
+function rememberNavigation(action, path = '') {
+  const route = { action, path };
+  if (JSON.stringify(history.state?.resonyr) !== JSON.stringify(route)) history.pushState({ resonyr: route }, '', location.href);
+}
+
+if (!history.state?.resonyr) history.replaceState({ resonyr: { action: 'home', path: '' } }, '', location.href);
+window.addEventListener('popstate', async () => {
+  setSidebarOpen(false);
+  const route = history.state?.resonyr || { action: 'home', path: '' };
+  try {
+    if (route.action === 'home') await loadLibrary(route.path);
+    else if (route.action === 'files') await loadFiles(route.path);
+    else document.querySelector(`[data-action="${route.action}"]`)?.click();
+    document.querySelectorAll('[data-action]').forEach((item) => item.classList.toggle('nav__item--active', item.dataset.action === route.action));
+  } catch (error) { offline.notify(error.message); }
+});
 
 async function loadThemes(activeTheme = elements.themeSelect.value) {
   const themes = await api('/api/themes');
@@ -679,6 +707,7 @@ async function loadLibrary(path, recursive = false) {
   if (state.format) query.set('format', state.format);
   const data = await api(`/api/library?${query}`);
   if (recursive) return data.tracks;
+  rememberNavigation('home', path);
   state.currentView = 'library';
   state.currentPlaylist = null;
   showLibraryActions();
@@ -1162,12 +1191,16 @@ elements.playlistLayoutSelect.addEventListener('change', () => {
   loadPlaylists();
 });
 elements.menuButton.addEventListener('click', () => {
-  if (innerWidth <= 760) document.querySelector('.sidebar').classList.toggle('sidebar--open');
+  if (innerWidth <= 760) setSidebarOpen(!document.querySelector('.sidebar').classList.contains('sidebar--open'));
   else {
     elements.app.classList.toggle('app--sidebar-collapsed');
     localStorage.setItem('playerSidebarCollapsed', elements.app.classList.contains('app--sidebar-collapsed'));
   }
 });
+document.getElementById('sidebarBackdrop').addEventListener('click', () => setSidebarOpen(false));
+document.getElementById('sidebarClose').addEventListener('click', () => setSidebarOpen(false));
+document.addEventListener('keydown', (event) => { if (event.key === 'Escape') setSidebarOpen(false); });
+window.addEventListener('resize', () => { if (innerWidth > 760) setSidebarOpen(false); });
 document.querySelector('[data-action="home"]').addEventListener('click', () => {
   elements.searchInput.value = '';
   setActiveNavigation('home');
@@ -1346,11 +1379,11 @@ elements.uploadFilesButton.addEventListener('click', () => {
   elements.musicModal.showModal();
 });
 elements.uploadFolderButton.addEventListener('click', () => elements.folderInput.click());
-elements.fileDropzone.addEventListener('click', () => elements.folderInput.click());
+elements.fileDropzone.addEventListener('click', () => innerWidth <= 760 ? elements.uploadFilesButton.click() : elements.folderInput.click());
 elements.fileDropzone.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ' ') {
     event.preventDefault();
-    elements.folderInput.click();
+    elements.fileDropzone.click();
   }
 });
 elements.folderInput.addEventListener('change', async () => {
@@ -1387,6 +1420,7 @@ elements.newUserButton.addEventListener('click', () => elements.userModal.showMo
 elements.uploadThemeButton.addEventListener('click', () => elements.themeModal.showModal());
 elements.newSourceButton.addEventListener('click', () => {
   elements.sourceForm.reset();
+  elements.sourceProvider.dispatchEvent(new Event('change'));
   elements.sourceModal.showModal();
 });
 elements.newBackupButton.addEventListener('click', async () => { elements.newBackupButton.disabled = true; try { await api('/api/admin/backups', { method: 'POST' }); await loadOperations(); } finally { elements.newBackupButton.disabled = false; } });
@@ -1566,6 +1600,19 @@ elements.themeForm.addEventListener('submit', async (event) => {
   elements.themeModal.close();
   elements.themeForm.reset();
   await loadThemes();
+});
+elements.sourceProvider.addEventListener('change', () => {
+  const useToken = elements.sourceProvider.value === 'yandex-disk';
+  document.getElementById('sourceTokenField').hidden = !useToken;
+  document.getElementById('sourceTokenHelp').hidden = !useToken;
+  const tokenInput = elements.sourceForm.elements.accessToken;
+  tokenInput.disabled = !useToken;
+  tokenInput.required = useToken;
+  for (const name of ['clientId', 'clientSecret']) {
+    const input = elements.sourceForm.elements[name];
+    input.disabled = useToken;
+    input.closest('label').hidden = useToken;
+  }
 });
 elements.sourceForm.addEventListener('submit', async (event) => {
   event.preventDefault();

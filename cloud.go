@@ -28,6 +28,7 @@ type musicSource struct {
 }
 
 type sourceRequest struct {
+	AccessToken  string `json:"accessToken"`
 	Name         string `json:"name"`
 	Provider     string `json:"provider"`
 	RemotePath   string `json:"remotePath"`
@@ -167,9 +168,41 @@ func (application *app) startSourceOAuth(response http.ResponseWriter, request *
 	payload.RemotePath = strings.Trim(strings.TrimSpace(payload.RemotePath), "/")
 	payload.ClientID = strings.TrimSpace(payload.ClientID)
 	payload.ClientSecret = strings.TrimSpace(payload.ClientSecret)
+	payload.AccessToken = strings.TrimSpace(payload.AccessToken)
 	_, ok := cloudProviderSpec(payload.Provider)
 	if !ok || !sourceRequestValid(payload) {
 		writeError(response, http.StatusBadRequest, "Некорректный источник")
+		return
+	}
+	if payload.AccessToken != "" {
+		if payload.Provider != "yandex-disk" || len(payload.AccessToken) > 4096 || strings.ContainsAny(payload.AccessToken, " \r\n\t") {
+			writeError(response, http.StatusBadRequest, "Некорректный токен Яндекс Диска")
+			return
+		}
+		ctx, cancel := context.WithTimeout(request.Context(), 20*time.Second)
+		defer cancel()
+		var diskInfo map[string]any
+		if err := cloudGETWithScheme(ctx, "https://cloud-api.yandex.net/v1/disk/resources?path=disk%3A%2F&limit=1", "OAuth", payload.AccessToken, &diskInfo); err != nil {
+			writeError(response, http.StatusBadRequest, "Не удалось проверить токен Яндекс Диска. Проверьте право чтения и доступность сервиса")
+			return
+		}
+		config, err := json.Marshal(cloudToken{AccessToken: payload.AccessToken, TokenType: "OAuth"})
+		if err == nil {
+			config, err = application.encryptConfig(config)
+		}
+		if err == nil {
+			_, err = application.db.Exec(request.Context(), "INSERT INTO music_sources (name, provider, remote_name, remote_path, config) VALUES ($1, $2, 'native', $3, $4)", payload.Name, payload.Provider, payload.RemotePath, config)
+		}
+		if err != nil {
+			writeError(response, http.StatusInternalServerError, "Не удалось сохранить источник")
+			return
+		}
+		writeJSON(response, http.StatusOK, map[string]string{"url": "/?source=connected"})
+		return
+	}
+	publicURL := strings.TrimRight(env("PUBLIC_URL", "http://localhost:8080"), "/")
+	if origin := request.Header.Get("Origin"); origin != "" && origin != publicURL {
+		writeError(response, http.StatusBadRequest, "Откройте плеер по адресу PUBLIC_URL из .env. Адрес входа и возврата из облака должен совпадать")
 		return
 	}
 	if (payload.ClientID == "") != (payload.ClientSecret == "") || !oauthCredentialsValid(oauthCredentials{ClientID: payload.ClientID, ClientSecret: payload.ClientSecret}, payload.ClientID == "") {

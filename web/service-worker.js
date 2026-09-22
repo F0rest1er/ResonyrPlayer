@@ -1,5 +1,5 @@
-const shellCache = 'resonyr-shell-v17';
-const shellFiles = ['/', '/style.css', '/offline.js', '/app.js', '/manifest.webmanifest', '/icon.svg'];
+const shellCache = 'resonyr-shell-v18';
+const shellFiles = ['/', '/style.css', '/offline.js', '/app.js', '/manifest.webmanifest', '/icon.svg', '/icon-32.png', '/icon-180.png', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', (event) => event.waitUntil(Promise.all([caches.open(shellCache).then((cache) => cache.addAll(shellFiles)), self.skipWaiting()])));
 self.addEventListener('activate', (event) => event.waitUntil(Promise.all([self.clients.claim(), caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('resonyr-shell-') && key !== shellCache).map((key) => caches.delete(key))))])));
@@ -11,7 +11,7 @@ self.addEventListener('fetch', (event) => {
     event.respondWith(audioResponse(event.request));
     return;
   }
-  if (event.request.mode === 'navigate' || shellFiles.includes(url.pathname)) {
+  if (shellFiles.includes(url.pathname)) {
     event.respondWith(caches.open(shellCache).then(async (cache) => (await cache.match(event.request.mode === 'navigate' ? '/' : url.pathname)) || fetch(event.request)));
     return;
   }

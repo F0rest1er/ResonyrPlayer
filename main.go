@@ -1011,6 +1011,10 @@ type statusResponse struct {
 	status int
 }
 
+func (response *statusResponse) Unwrap() http.ResponseWriter {
+	return response.ResponseWriter
+}
+
 func (response *statusResponse) WriteHeader(status int) {
 	response.status = status
 	response.ResponseWriter.WriteHeader(status)

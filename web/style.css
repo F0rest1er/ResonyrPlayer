@@ -357,6 +357,12 @@ button { border: 0; }
   .folders { grid-template-columns: 1fr 1fr; }
   .cover { flex-basis: 48px; height: 48px; }
 }
+.sidebar__close { display: none; }
+.sidebar__backdrop { position: fixed; inset: 0; z-index: 9; border: 0; background: #0008; }
+@media (max-width: 760px) {
+  .sidebar__close { display: flex; align-self: flex-end; flex-shrink: 0; }
+  .sidebar:not(.sidebar--open) { visibility: hidden; }
+}
 .offline-status {
   padding: 10px 16px;
   margin: 0 0 16px;

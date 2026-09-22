@@ -35,12 +35,18 @@ const offline = {
   },
   async network(path, options = {}) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+    const timeout = setTimeout(() => controller.abort(), path.includes('/artists') ? 45000 : 8000);
     try {
       const response = await fetch(path, { ...options, signal: controller.signal, cache: 'no-store' });
-      if (response.status >= 500) throw new Error('Сервер недоступен');
+      if (response.status >= 500 && path === '/api/me') throw new Error('Сервер недоступен');
       return response;
     } catch (cause) {
+      if (path !== '/api/me') {
+        try {
+          const probe = await fetch('/api/me', { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+          if (probe.status < 500) return Response.json({ error: 'Сервис не ответил вовремя. Повторите запрос.' }, { status: 504 });
+        } catch {}
+      }
       const error = new Error('Нет связи с сервером', { cause });
       error.network = true;
       throw error;
