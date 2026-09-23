@@ -482,19 +482,58 @@ async function loadReleases() {
 
 async function loadOperations() {
   state.currentView = 'operations';
-  const [logs, backups, update] = await Promise.all([api('/api/admin/logs'), api('/api/admin/backups'), api('/api/admin/update')]);
+  const [logs, backups, update, job] = await Promise.all([api('/api/admin/logs'), api('/api/admin/backups'), api('/api/admin/update').catch((error) => ({ error: error.message })), api('/api/admin/update/job')]);
   elements.libraryTitle.textContent = 'Система';
   elements.breadcrumbs.replaceChildren();
-  const updateCard = document.createElement(update.configured && update.url?.startsWith('https://github.com/') ? 'a' : 'div');
+  const updateCard = document.createElement('div');
   updateCard.className = 'folder';
-  if (updateCard instanceof HTMLAnchorElement) updateCard.href = update.url;
   const updateTitle = document.createElement('strong');
   updateTitle.className = 'folder__name';
   updateTitle.textContent = update.updateAvailable ? `Доступна версия ${update.latestVersion}` : update.configured ? `Версия ${update.currentVersion} актуальна` : 'Проверка обновлений не настроена';
   const updateMeta = document.createElement('small');
   updateMeta.className = 'track__artist';
-  updateMeta.textContent = update.configured ? 'GitHub Releases' : 'Укажите UPDATE_REPOSITORY в .env';
+  updateMeta.textContent = update.error || (job.workerOnline ? 'Обновление из браузера подключено' : 'Для обновления запустите на хосте sh web-updater.sh');
   updateCard.append(updateTitle, updateMeta);
+  const updateButton = document.createElement('button');
+  updateButton.className = 'button button--primary';
+  updateButton.textContent = job.busy ? 'Обновление выполняется…' : 'Установить обновление';
+  updateButton.disabled = !job.workerOnline || job.busy || !update.updateAvailable;
+  const updateProgress = document.createElement('p');
+  updateProgress.className = 'update-status';
+  updateProgress.setAttribute('role', 'status');
+  const updateMessages = { backup: 'Создаётся резервная копия базы…', installing: 'Установка. Плеер временно отключится.', completed: 'Обновление завершено. Перезагрузите страницу.', failed: 'Обновление не завершено. Проверьте журнал процесса на хосте.' };
+  updateProgress.textContent = updateMessages[job.status] || '';
+  const watchUpdate = async () => {
+    for (let attempt = 0; attempt < 240 && state.currentView === 'operations' && updateProgress.isConnected; attempt++) {
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+      try {
+        const response = await fetch('/api/admin/update/job', { cache: 'no-store' });
+        if (!response.ok) continue;
+        const progress = await response.json();
+        updateProgress.textContent = updateMessages[progress.status] || 'Ожидание процесса обновления…';
+        if (!progress.busy) {
+          if (progress.status === 'completed') {
+            const registration = await navigator.serviceWorker?.getRegistration();
+            await registration?.update();
+          }
+          updateButton.textContent = 'Проверить состояние';
+          updateButton.disabled = false;
+          updateButton.onclick = () => loadOperations();
+          return;
+        }
+      } catch { updateProgress.textContent = 'Плеер перезапускается. Ждём подключения…'; }
+    }
+  };
+  updateButton.onclick = async () => {
+    if (!window.confirm(`Установить ${update.latestVersion}? Будет создана копия базы. Во время обновления воспроизведение прервётся.`)) return;
+    updateButton.disabled = true;
+    updateProgress.textContent = 'Подготовка и резервное копирование…';
+    try {
+      await api('/api/admin/update', { method: 'POST', body: JSON.stringify({ version: update.latestVersion }) });
+      await watchUpdate();
+    } catch (error) { updateProgress.textContent = error.message; updateButton.disabled = false; }
+  };
+  updateCard.append(updateButton, updateProgress);
   elements.folders.replaceChildren(updateCard, ...backups.map((item) => {
     const link = document.createElement('a');
     link.className = 'folder';
@@ -525,6 +564,7 @@ async function loadOperations() {
     return row;
   }));
   elements.empty.hidden = true;
+  if (job.busy) watchUpdate();
   setEmpty('Системных событий пока нет', 'Здесь появятся журнал действий и резервные копии.');
   showLibraryActions();
 }
@@ -905,12 +945,39 @@ function playCurrent() {
   persistPlayback();
   updatePlayButton();
   document.querySelectorAll('.track').forEach((row) => row.classList.toggle('track--active', Number(row.dataset.id) === item.id));
-  navigator.mediaSession && (navigator.mediaSession.metadata = new MediaMetadata({
+  syncMediaSession(item);
+  syncMediaPlaybackState();
+}
+
+function syncMediaSession(item) {
+  if (!('mediaSession' in navigator) || !item) return;
+  const origin = location.origin;
+  const artwork = item.hasCover
+    ? [96, 128, 192, 256, 384, 512].map((size) => ({ src: new URL(offline.mediaURL(item.id, 'cover'), origin).href, sizes: `${size}x${size}`, type: 'image/jpeg' }))
+    : [192, 512].map((size) => ({ src: new URL(`/icon-${size}.png`, origin).href, sizes: `${size}x${size}`, type: 'image/png' }));
+  navigator.mediaSession.metadata = new MediaMetadata({
     title: item.title,
-    artist: item.artist,
-    album: item.album,
-    artwork: item.hasCover ? [{ src: offline.mediaURL(item.id, 'cover') }] : [],
-  }));
+    artist: item.artist || 'Неизвестный исполнитель',
+    album: item.album || '',
+    artwork,
+  });
+}
+
+function syncMediaPlaybackState() {
+  if (!('mediaSession' in navigator)) return;
+  navigator.mediaSession.playbackState = elements.audio.paused ? 'paused' : 'playing';
+}
+
+function syncMediaPosition() {
+  if (!('mediaSession' in navigator) || !('setPositionState' in navigator.mediaSession)) return;
+  if (!Number.isFinite(elements.audio.duration) || elements.audio.duration <= 0) return;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: Math.max(0, elements.audio.duration),
+      playbackRate: elements.audio.playbackRate || 1,
+      position: Math.min(elements.audio.duration, Math.max(0, elements.audio.currentTime || 0)),
+    });
+  } catch {}
 }
 
 function showLibraryActions() {
@@ -1095,6 +1162,8 @@ async function restorePlayback(autoplay = false) {
   elements.coverImage.hidden = !item.hasCover;
   elements.coverPlaceholder.hidden = item.hasCover;
   elements.coverImage.src = item.hasCover ? offline.mediaURL(item.id, 'cover') : '';
+  syncMediaSession(item);
+  syncMediaPlaybackState();
   elements.audio.addEventListener('loadedmetadata', async () => {
     elements.audio.currentTime = playback.position;
     if (autoplay && playback.isPlaying && isOutputDevice()) await elements.audio.play().catch(() => {});
@@ -1454,6 +1523,8 @@ elements.playlistForm.addEventListener('submit', async (event) => {
   let createdItem;
   error.textContent = '';
   elements.playlistSubmitButton.disabled = true;
+  const originalButtonText = elements.playlistSubmitButton.textContent;
+  elements.playlistSubmitButton.textContent = 'Сохранение…';
   try {
     const details = JSON.stringify({ name: form.get('name'), description: form.get('description') });
     if (editingId) await api(`/api/playlists/${editingId}`, { method: 'PUT', body: details });
@@ -1478,6 +1549,7 @@ elements.playlistForm.addEventListener('submit', async (event) => {
     error.textContent = requestError.message;
   } finally {
     elements.playlistSubmitButton.disabled = false;
+    elements.playlistSubmitButton.textContent = originalButtonText;
   }
 });
 elements.trackMetadataForm.addEventListener('submit', async (event) => {
@@ -1488,6 +1560,8 @@ elements.trackMetadataForm.addEventListener('submit', async (event) => {
   form.set('removeCover', String(state.removeTrackCover));
   error.textContent = '';
   submit.disabled = true;
+  const originalSubmitText = submit.textContent;
+  submit.textContent = 'Сохранение…';
   try {
     const result = await api(`/api/admin/tracks/${state.pendingTrackId}`, { method: 'PUT', body: form });
     const coverChanged = result.coverChanged;
@@ -1510,6 +1584,7 @@ elements.trackMetadataForm.addEventListener('submit', async (event) => {
     error.textContent = requestError.message;
   } finally {
     submit.disabled = false;
+    submit.textContent = originalSubmitText;
   }
 });
 elements.musicForm.addEventListener('submit', async (event) => {
@@ -1707,12 +1782,14 @@ elements.repeatButton.addEventListener('click', () => {
   elements.repeatButton.textContent = state.repeat === 1 ? '↻₁' : '↻';
   elements.repeatButton.classList.toggle('icon-button--active', state.repeat > 0);
 });
-elements.audio.addEventListener('play', () => { updatePlayButton(); persistPlayback(); });
-elements.audio.addEventListener('pause', () => { updatePlayButton(); persistPlayback(); });
+elements.audio.addEventListener('play', () => { updatePlayButton(); persistPlayback(); syncMediaPlaybackState(); syncMediaPosition(); });
+elements.audio.addEventListener('pause', () => { updatePlayButton(); persistPlayback(); syncMediaPlaybackState(); syncMediaPosition(); });
+elements.audio.addEventListener('durationchange', syncMediaPosition);
 elements.audio.addEventListener('timeupdate', () => {
   elements.currentTime.textContent = formatTime(elements.audio.currentTime);
   elements.duration.textContent = formatTime(elements.audio.duration);
   elements.progressRange.value = elements.audio.duration ? (elements.audio.currentTime / elements.audio.duration) * 100 : 0;
+  syncMediaPosition();
   if (Date.now() - state.lastSavedAt > 5000) {
     state.lastSavedAt = Date.now();
     persistPlayback();
@@ -1725,12 +1802,15 @@ elements.audio.addEventListener('ended', () => {
 elements.progressRange.addEventListener('input', () => {
   if (elements.audio.duration) sendControl('seek', elements.audio.duration * Number(elements.progressRange.value) / 100);
 });
-const savedVolume = Number(localStorage.getItem('resonyrVolume'));
-const initialVolume = Number.isFinite(savedVolume) && savedVolume >= 0 && savedVolume <= 1 ? savedVolume : 0.8;
-let lastVolume = initialVolume > 0 ? initialVolume : 0.8;
+const rawVolume = localStorage.getItem('resonyrVolume');
+const parsedVolume = rawVolume !== null ? parseFloat(rawVolume) : NaN;
+const isMobileDevice = window.matchMedia('(hover: none) and (pointer: coarse)').matches || innerWidth <= 760;
+const initialVolume = isMobileDevice ? 1 : (Number.isFinite(parsedVolume) && parsedVolume >= 0 && parsedVolume <= 1 ? parsedVolume : 1);
+let lastVolume = initialVolume > 0 ? initialVolume : 1;
 
 function setVolume(value) {
-  const volume = Math.max(0, Math.min(1, Number(value)));
+  const isMobile = window.matchMedia('(hover: none) and (pointer: coarse)').matches || innerWidth <= 760;
+  const volume = isMobile ? 1 : Math.max(0, Math.min(1, Number(value)));
   elements.audio.volume = volume;
   elements.volumeRange.value = String(volume);
   elements.volumeRange.style.setProperty('--volume-level', `${volume * 100}%`);
@@ -1738,7 +1818,7 @@ function setVolume(value) {
   elements.volumeWaveLarge.hidden = volume < 0.5;
   elements.volumeButton.ariaLabel = volume === 0 ? 'Включить звук' : 'Выключить звук';
   if (volume > 0) lastVolume = volume;
-  localStorage.setItem('resonyrVolume', String(volume));
+  if (!isMobile) localStorage.setItem('resonyrVolume', String(volume));
 }
 
 elements.volumeRange.addEventListener('input', () => setVolume(elements.volumeRange.value));
@@ -1750,6 +1830,19 @@ if ('mediaSession' in navigator) {
   navigator.mediaSession.setActionHandler('pause', () => sendControl('pause'));
   navigator.mediaSession.setActionHandler('previoustrack', () => sendControl('previous'));
   navigator.mediaSession.setActionHandler('nexttrack', () => sendControl('next'));
+  navigator.mediaSession.setActionHandler('seekto', (details) => {
+    if (details.seekTime !== undefined && Number.isFinite(details.seekTime)) sendControl('seek', details.seekTime);
+  });
+  navigator.mediaSession.setActionHandler('seekbackward', (details) => {
+    sendControl('seek', Math.max(0, (elements.audio.currentTime || 0) - (details.seekOffset || 10)));
+  });
+  navigator.mediaSession.setActionHandler('seekforward', (details) => {
+    sendControl('seek', Math.min(elements.audio.duration || 0, (elements.audio.currentTime || 0) + (details.seekOffset || 10)));
+  });
+  navigator.mediaSession.setActionHandler('stop', () => {
+    sendControl('pause');
+    sendControl('seek', 0);
+  });
 }
 
 if ('serviceWorker' in navigator) {

@@ -1,5 +1,5 @@
-const shellCache = 'resonyr-shell-v18';
-const shellFiles = ['/', '/style.css', '/offline.js', '/app.js', '/manifest.webmanifest', '/icon.svg', '/icon-32.png', '/icon-180.png', '/icon-192.png', '/icon-512.png'];
+const shellCache = 'resonyr-shell-v20';
+const shellFiles = ['/', '/style.css', '/offline.js', '/app.js', '/manifest.webmanifest', '/icon.svg', '/icon-32.png', '/icon-180.png', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png'];
 
 self.addEventListener('install', (event) => event.waitUntil(Promise.all([caches.open(shellCache).then((cache) => cache.addAll(shellFiles)), self.skipWaiting()])));
 self.addEventListener('activate', (event) => event.waitUntil(Promise.all([self.clients.claim(), caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('resonyr-shell-') && key !== shellCache).map((key) => caches.delete(key))))])));
@@ -12,7 +12,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
   if (shellFiles.includes(url.pathname)) {
-    event.respondWith(caches.open(shellCache).then(async (cache) => (await cache.match(event.request.mode === 'navigate' ? '/' : url.pathname)) || fetch(event.request)));
+    event.respondWith(caches.open(shellCache).then(async (cache) => {
+      const key = event.request.mode === 'navigate' ? '/' : url.pathname;
+      try {
+        const response = await fetch(event.request);
+        if (response.ok) { await cache.put(key, response.clone()); return response; }
+        return (await cache.match(key)) || response;
+      } catch (error) {
+        const saved = await cache.match(key);
+        if (saved) return saved;
+        throw error;
+      }
+    }));
     return;
   }
 });
@@ -22,7 +33,15 @@ self.addEventListener('push', (event) => {
 });
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  event.waitUntil(clients.openWindow(event.notification.data.url));
+  const targetUrl = event.notification.data?.url || '/';
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((windowClients) => {
+      for (const client of windowClients) {
+        if ('focus' in client) return client.focus();
+      }
+      return clients.openWindow(targetUrl);
+    })
+  );
 });
 
 async function audioResponse(request) {

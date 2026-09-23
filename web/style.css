@@ -313,7 +313,7 @@ button { border: 0; }
 
 @media (max-width: 760px) {
   .app, .app--sidebar-collapsed { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) auto; }
-  .sidebar { position: fixed; z-index: 10; inset: 0 auto 154px 0; width: 230px; transform: translateX(-102%); transition: transform .2s; }
+  .sidebar { position: fixed; z-index: 10; inset: 0 auto 0 0; width: min(280px, 85vw); height: 100dvh; max-height: 100dvh; padding-top: max(20px, env(safe-area-inset-top)); padding-bottom: max(20px, env(safe-area-inset-bottom)); background: var(--surface-solid); box-shadow: 8px 0 32px rgba(0, 0, 0, .45); transform: translateX(-102%); transition: transform .2s cubic-bezier(0.16, 1, 0.3, 1); }
   .sidebar--open { transform: translateX(0); }
   .app--sidebar-collapsed .brand__name, .app--sidebar-collapsed .nav__label { display: block; }
   .app--sidebar-collapsed .nav__item { justify-content: flex-start; padding-inline: 12px; }

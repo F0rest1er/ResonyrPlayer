@@ -224,6 +224,8 @@ func main() {
 	mux.HandleFunc("POST /api/admin/backups", application.authAdmin(application.createBackup))
 	mux.HandleFunc("GET /api/admin/backups/{name}", application.authAdmin(application.downloadBackup))
 	mux.HandleFunc("GET /api/admin/update", application.authAdmin(application.updateStatus))
+	mux.HandleFunc("POST /api/admin/update", application.authAdmin(application.startWebUpdate))
+	mux.HandleFunc("GET /api/admin/update/job", application.authAdmin(application.webUpdateStatus))
 	mux.HandleFunc("POST /api/admin/music", application.authAdmin(application.uploadMusic))
 	mux.HandleFunc("GET /api/admin/files", application.authAdmin(application.files))
 	mux.HandleFunc("POST /api/admin/files/folders", application.authAdmin(application.createFolder))
@@ -1092,7 +1094,7 @@ func writeError(response http.ResponseWriter, status int, message string) {
 
 func securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-		response.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+		response.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; media-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
 		response.Header().Set("X-Content-Type-Options", "nosniff")
 		response.Header().Set("X-Frame-Options", "DENY")
 		response.Header().Set("Referrer-Policy", "same-origin")
