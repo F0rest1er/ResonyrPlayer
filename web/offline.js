@@ -31,7 +31,7 @@ const offline = {
     }
   },
   canQueue(path, method) {
-    return (method === 'PUT' && (/^\/api\/tracks\/\d+\/favorite$/.test(path) || path === '/api/playback' || /^\/api\/playlists\/\d+$/.test(path)))
+    return (method === 'PUT' && (/^\/api\/tracks\/\d+\/favorite$/.test(path) || path === '/api/playback' || /^\/api\/playlists\/\d+(\/tracks)?$/.test(path)))
       || (method === 'POST' && /^\/api\/playlists\/\d+\/tracks$/.test(path))
       || (method === 'DELETE' && /^\/api\/playlists\/\d+\/tracks\/\d+$/.test(path));
   },
@@ -92,8 +92,13 @@ const offline = {
         const playlistId = Number(playlistMatch[1]);
         if (url.pathname === '/api/playlists') {
           const playlist = data.find((item) => item.id === playlistId);
-          if (playlist && operation.method === 'PUT') Object.assign(playlist, payload);
+          if (playlist && operation.method === 'PUT' && !operation.path.endsWith('/tracks')) Object.assign(playlist, payload);
+          if (playlist && operation.method === 'PUT' && operation.path.endsWith('/tracks') && Array.isArray(payload.trackIds)) {
+            playlist.trackIds = [...payload.trackIds];
+            playlist.trackCount = payload.trackIds.length;
+          }
           if (playlist && operation.method !== 'PUT') {
+            const ids = new Set(playlist.trackIds || []);
             if (operation.method === 'POST') {
               if (Array.isArray(payload.trackIds)) payload.trackIds.forEach((id) => ids.add(id));
               else if (payload.trackId) ids.add(payload.trackId);
@@ -104,6 +109,12 @@ const offline = {
           }
         }
         if (url.pathname === `/api/playlists/${playlistId}` && Array.isArray(data)) {
+          if (operation.method === 'PUT' && operation.path.endsWith('/tracks') && Array.isArray(payload.trackIds)) {
+            const trackMap = new Map(data.map((t) => [t.id, t]));
+            const reordered = payload.trackIds.map((id) => trackMap.get(id)).filter(Boolean);
+            data.length = 0;
+            data.push(...reordered);
+          }
           if (operation.method === 'DELETE') {
             const index = data.findIndex((item) => item.id === Number(playlistMatch[2]));
             if (index >= 0) data.splice(index, 1);

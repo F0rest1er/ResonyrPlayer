@@ -472,6 +472,37 @@ func (application *app) removePlaylistTrack(response http.ResponseWriter, reques
 	response.WriteHeader(http.StatusNoContent)
 }
 
+func (application *app) reorderPlaylistTracks(response http.ResponseWriter, request *http.Request, currentUser user) {
+	id, ok := parseID(response, request.PathValue("id"))
+	if !ok || !application.playlistAllowed(request, currentUser, id, "edit") {
+		writeError(response, http.StatusForbidden, "Нельзя изменять этот плейлист")
+		return
+	}
+	var payload struct {
+		TrackIDs []int64 `json:"trackIds"`
+	}
+	if !decodeJSON(response, request, &payload) {
+		return
+	}
+	tx, err := application.db.Begin(request.Context())
+	if err != nil {
+		writeError(response, http.StatusInternalServerError, "Ошибка базы данных")
+		return
+	}
+	defer tx.Rollback(request.Context())
+	for index, trackID := range payload.TrackIDs {
+		if _, err := tx.Exec(request.Context(), "UPDATE playlist_tracks SET position = $1 WHERE playlist_id = $2 AND track_id = $3", index+1, id, trackID); err != nil {
+			writeError(response, http.StatusInternalServerError, "Не удалось изменить порядок")
+			return
+		}
+	}
+	if err := tx.Commit(request.Context()); err != nil {
+		writeError(response, http.StatusInternalServerError, "Не удалось сохранить порядок")
+		return
+	}
+	response.WriteHeader(http.StatusNoContent)
+}
+
 func (application *app) playlistAllowed(request *http.Request, _ user, id int64, _ string) bool {
 	var exists bool
 	err := application.db.QueryRow(request.Context(), "SELECT EXISTS(SELECT 1 FROM playlists WHERE id = $1)", id).Scan(&exists)

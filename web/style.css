@@ -168,6 +168,9 @@ button { border: 0; }
 .track:last-child { border-bottom: 0; }
 .track:hover, .track--active { background: rgba(127, 127, 127, .09); }
 .track--selected { background: var(--accent-soft); }
+.track--dragging { opacity: .4; }
+.track--drop-before { border-top: 2px solid var(--accent); }
+.track--drop-after { border-bottom: 2px solid var(--accent); }
 .track__checkbox { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; margin: auto; }
 .track__number { color: var(--muted); font-size: 13px; text-align: center; }
 .track__picture { display: block; width: 42px; height: 42px; overflow: hidden; border-radius: 7px; background: var(--accent-soft); }

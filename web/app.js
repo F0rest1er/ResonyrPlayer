@@ -11,9 +11,12 @@ const state = {
   downloadBatch: false,
   format: '',
   lastSavedAt: 0,
+  draggedTrackId: null,
   pendingTrackId: null,
   pendingTrackIds: null,
   playlistLayout: localStorage.getItem('playerPlaylistLayout') === 'list' ? 'list' : 'grid',
+  playlistOriginalTracks: [],
+  playlistSort: 'custom',
   queue: [],
   queueIndex: -1,
   repeat: 0,
@@ -941,7 +944,8 @@ function makeTrack(item, index, tracks) {
     remove.addEventListener('click', async (event) => {
       event.stopPropagation();
       await api(`/api/playlists/${state.currentPlaylist.id}/tracks/${item.id}`, { method: 'DELETE' });
-      renderTrackView(state.currentPlaylist.name, await api(`/api/playlists/${state.currentPlaylist.id}`), 'playlist');
+      state.playlistOriginalTracks = await api(`/api/playlists/${state.currentPlaylist.id}`);
+      applyPlaylistSort();
     });
     actions.append(remove);
   }
@@ -952,6 +956,53 @@ function makeTrack(item, index, tracks) {
   }
   if (state.currentView === 'offline') actions.append(add, favorite);
   row.append(number, picture, info, album, format, actions);
+  const canDrag = state.currentView === 'playlist' && state.currentPlaylist?.permission === 'edit' && (!state.playlistSort || state.playlistSort === 'custom') && !state.selectMode;
+  if (canDrag) {
+    row.draggable = true;
+    row.addEventListener('dragstart', (event) => {
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', String(item.id));
+      row.classList.add('track--dragging');
+      state.draggedTrackId = item.id;
+    });
+    row.addEventListener('dragend', () => {
+      row.classList.remove('track--dragging');
+      elements.tracks.querySelectorAll('.track--drop-before, .track--drop-after').forEach((el) => {
+        el.classList.remove('track--drop-before', 'track--drop-after');
+      });
+      state.draggedTrackId = null;
+    });
+    row.addEventListener('dragover', (event) => {
+      if (!state.draggedTrackId || state.draggedTrackId === item.id) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      const rect = row.getBoundingClientRect();
+      const isTop = event.clientY < rect.top + rect.height / 2;
+      row.classList.toggle('track--drop-before', isTop);
+      row.classList.toggle('track--drop-after', !isTop);
+    });
+    row.addEventListener('dragleave', () => {
+      row.classList.remove('track--drop-before', 'track--drop-after');
+    });
+    row.addEventListener('drop', async (event) => {
+      event.preventDefault();
+      row.classList.remove('track--drop-before', 'track--drop-after');
+      const sourceId = state.draggedTrackId;
+      if (!sourceId || sourceId === item.id || !state.playlistOriginalTracks) return;
+      const sourceIndex = state.playlistOriginalTracks.findIndex((t) => t.id === sourceId);
+      let targetIndex = state.playlistOriginalTracks.findIndex((t) => t.id === item.id);
+      if (sourceIndex === -1 || targetIndex === -1) return;
+      const rect = row.getBoundingClientRect();
+      const isTop = event.clientY < rect.top + rect.height / 2;
+      if (!isTop) targetIndex++;
+      if (sourceIndex < targetIndex) targetIndex--;
+      const [moved] = state.playlistOriginalTracks.splice(sourceIndex, 1);
+      state.playlistOriginalTracks.splice(targetIndex, 0, moved);
+      renderTracks(state.playlistOriginalTracks);
+      const trackIds = state.playlistOriginalTracks.map((t) => t.id);
+      await api(`/api/playlists/${state.currentPlaylist.id}/tracks`, { method: 'PUT', body: JSON.stringify({ trackIds }) });
+    });
+  }
   row.addEventListener('click', () => {
     if (state.selectMode) {
       const checkbox = row.querySelector('.track__checkbox');
@@ -963,6 +1014,40 @@ function makeTrack(item, index, tracks) {
     requestPlayQueue(tracks, index);
   });
   return row;
+}
+
+function applyPlaylistSort() {
+  if (!state.playlistOriginalTracks) return;
+  const sorted = [...state.playlistOriginalTracks];
+  switch (state.playlistSort) {
+    case 'title_asc':
+      sorted.sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { sensitivity: 'base', numeric: true }));
+      break;
+    case 'title_desc':
+      sorted.sort((a, b) => (b.title || '').localeCompare(a.title || '', undefined, { sensitivity: 'base', numeric: true }));
+      break;
+    case 'artist_asc':
+      sorted.sort((a, b) => (a.artist || '').localeCompare(b.artist || '', undefined, { sensitivity: 'base', numeric: true }));
+      break;
+    case 'artist_desc':
+      sorted.sort((a, b) => (b.artist || '').localeCompare(a.artist || '', undefined, { sensitivity: 'base', numeric: true }));
+      break;
+    case 'album_asc':
+      sorted.sort((a, b) => (a.album || '').localeCompare(b.album || '', undefined, { sensitivity: 'base', numeric: true }));
+      break;
+    case 'album_desc':
+      sorted.sort((a, b) => (b.album || '').localeCompare(a.album || '', undefined, { sensitivity: 'base', numeric: true }));
+      break;
+    case 'duration_asc':
+      sorted.sort((a, b) => (a.duration || 0) - (b.duration || 0));
+      break;
+    case 'duration_desc':
+      sorted.sort((a, b) => (b.duration || 0) - (a.duration || 0));
+      break;
+    default:
+      break;
+  }
+  renderTracks(sorted);
 }
 
 function updateSelectModeUI() {
@@ -1071,7 +1156,8 @@ function showLibraryActions() {
   elements.clearDownloadsButton.hidden = downloadedIds.size === 0 || !['library', 'offline', 'playlists', 'playlist'].includes(state.currentView);
   elements.removePlaylistDownloadsButton.hidden = state.currentView !== 'playlist' || !state.visibleTracks.some((track) => downloadedIds.has(track.id));
   elements.formatSelect.closest('.select').hidden = state.currentView !== 'library';
-  elements.sortSelect.closest('.select').hidden = state.currentView !== 'library';
+  elements.sortSelect.closest('.select').hidden = state.currentView !== 'library' && state.currentView !== 'playlist';
+  updateSortOptions();
   elements.newPlaylistButton.hidden = state.currentView !== 'playlists';
   elements.playlistLayoutControl.hidden = state.currentView !== 'playlists';
   elements.editPlaylistButton.hidden = state.currentView !== 'playlist' || state.currentPlaylist?.permission !== 'edit';
@@ -1094,9 +1180,42 @@ function showLibraryActions() {
   elements.libraryDescription.hidden = !elements.libraryDescription.textContent;
 }
 
+function updateSortOptions() {
+  if (state.currentView === 'playlist') {
+    if (elements.sortSelect.dataset.view !== 'playlist') {
+      elements.sortSelect.dataset.view = 'playlist';
+      elements.sortSelect.replaceChildren(
+        new Option('Свой порядок', 'custom'),
+        new Option('Название (А → Я)', 'title_asc'),
+        new Option('Название (Я → А)', 'title_desc'),
+        new Option('Исполнитель (А → Я)', 'artist_asc'),
+        new Option('Исполнитель (Я → А)', 'artist_desc'),
+        new Option('Альбом (А → Я)', 'album_asc'),
+        new Option('Альбом (Я → А)', 'album_desc'),
+        new Option('Длительность (короткие)', 'duration_asc'),
+        new Option('Длительность (длинные)', 'duration_desc'),
+      );
+    }
+    elements.sortSelect.value = state.playlistSort || 'custom';
+  } else if (state.currentView === 'library') {
+    if (elements.sortSelect.dataset.view !== 'library') {
+      elements.sortSelect.dataset.view = 'library';
+      elements.sortSelect.replaceChildren(
+        new Option('По папкам', ''),
+        new Option('Исполнитель', 'artist'),
+        new Option('Альбом', 'album'),
+        new Option('Название', 'title'),
+        new Option('Год', 'year'),
+      );
+    }
+    elements.sortSelect.value = state.sort || '';
+  }
+}
+
 function renderTrackView(title, tracks, view) {
   resetSelectMode();
   state.currentView = view;
+  if (view === 'playlist') state.playlistOriginalTracks = tracks;
   elements.libraryTitle.textContent = title;
   elements.breadcrumbs.replaceChildren();
   elements.folders.replaceChildren();
@@ -1143,7 +1262,7 @@ function makePlaylist(item) {
   meta.className = 'playlist-card__meta';
   const downloadedIds = new Set(offlineTracks().map((track) => track.id));
   const downloadedCount = item.trackIds.filter((id) => downloadedIds.has(id)).length;
-  const offlineStatus = downloadedCount === item.trackCount && item.trackCount > 0 ? 'скачан' : downloadedCount > 0 ? `${downloadedCount}/${item.trackCount} скачано` : `${item.trackCount} треков`;
+  const offlineStatus = downloadedCount === item.trackCount && item.trackCount > 0 ? 'скачан' : downloadedCount > 0 ? `${downloadedCount}/${item.trackCount} скачано` : formatTrackCount(item.trackCount);
   meta.textContent = `${item.owner} · ${offlineStatus}`;
   button.append(picture, name, description, meta);
   button.addEventListener('click', () => openPlaylist(item));
@@ -1178,6 +1297,8 @@ function makePlaylist(item) {
 async function openPlaylist(item) {
   const tracks = await api(`/api/playlists/${item.id}`);
   state.currentPlaylist = item;
+  state.playlistOriginalTracks = tracks;
+  state.playlistSort = 'custom';
   renderTrackView(item.name, tracks, 'playlist');
 }
 
@@ -1194,7 +1315,8 @@ function makePlaylistChoice(item) {
       offline.notify('Треки добавлены в плейлист');
     }
     if (state.currentView === 'playlist' && state.currentPlaylist?.id === item.id) {
-      renderTrackView(state.currentPlaylist.name, await api(`/api/playlists/${state.currentPlaylist.id}`), 'playlist');
+      state.playlistOriginalTracks = await api(`/api/playlists/${state.currentPlaylist.id}`);
+      applyPlaylistSort();
     }
   });
   return button;
@@ -1293,6 +1415,15 @@ function formatTime(seconds) {
   return `${Math.floor(seconds / 60)}:${String(Math.floor(seconds % 60)).padStart(2, '0')}`;
 }
 
+function formatTrackCount(count) {
+  const abs = Math.abs(count) % 100;
+  const last = abs % 10;
+  if (abs > 10 && abs < 20) return `${count} треков`;
+  if (last > 1 && last < 5) return `${count} трека`;
+  if (last === 1) return `${count} трек`;
+  return `${count} треков`;
+}
+
 elements.loginForm.addEventListener('submit', async (event) => {
   event.preventDefault();
   const form = new FormData(elements.loginForm);
@@ -1362,6 +1493,11 @@ elements.addSelectedToPlaylistButton.addEventListener('click', async () => {
   elements.addTrackModal.showModal();
 });
 elements.sortSelect.addEventListener('change', () => {
+  if (state.currentView === 'playlist') {
+    state.playlistSort = elements.sortSelect.value;
+    applyPlaylistSort();
+    return;
+  }
   state.sort = elements.sortSelect.value;
   loadLibrary(state.currentPath);
 });
