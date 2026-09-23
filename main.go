@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -186,6 +187,7 @@ func main() {
 	mux.HandleFunc("GET /api/playlists/{id}/cover", application.auth(application.playlistCover))
 	mux.HandleFunc("PUT /api/playlists/{id}/cover", application.auth(application.updatePlaylistCover))
 	mux.HandleFunc("POST /api/playlists/{id}/tracks", application.auth(application.addPlaylistTrack))
+	mux.HandleFunc("PUT /api/playlists/{id}/tracks", application.auth(application.reorderPlaylistTracks))
 	mux.HandleFunc("DELETE /api/playlists/{id}/tracks/{trackId}", application.auth(application.removePlaylistTrack))
 	mux.HandleFunc("GET /api/history", application.auth(application.history))
 	mux.HandleFunc("POST /api/history", application.auth(application.addHistory))
@@ -554,7 +556,10 @@ func (application *app) scanRoot(ctx context.Context, root, prefix string, seen 
 			metadata.AlbumArtist, metadata.Year, metadata.TrackNumber, metadata.DiscNumber, metadata.Genre,
 			metadata.Composer, metadata.Comment, metadata.Duration, metadata.Bitrate, metadata.SampleRate,
 			metadata.Format, info.Size(), info.ModTime(), string(metadata.Raw), metadata.Cover, metadata.CoverMIME)
-		return err
+		if err != nil {
+			log.Printf("ошибка сканирования трека %s: %v", libraryPath, err)
+		}
+		return nil
 	})
 }
 
@@ -614,7 +619,8 @@ func readTrackMetadata(ctx context.Context, path, relativePath string) trackMeta
 				result.Cover = picture.Data
 				result.CoverMIME = picture.MIMEType
 			}
-			result.Raw, _ = json.Marshal(cleanRawTags(metadata.Raw()))
+			rawBytes, _ := json.Marshal(cleanRawTags(metadata.Raw()))
+			result.Raw = bytes.ReplaceAll(rawBytes, []byte("\\u0000"), []byte(""))
 		}
 	}
 	var probe struct {
@@ -646,7 +652,26 @@ func readTrackMetadata(ctx context.Context, path, relativePath string) trackMeta
 	if len(result.Raw) == 0 {
 		result.Raw = []byte("{}")
 	}
+	sanitizeTrackMetadata(&result)
 	return result
+}
+
+func sanitizeString(val string) string {
+	return strings.ReplaceAll(strings.ToValidUTF8(val, ""), "\x00", "")
+}
+
+func sanitizeTrackMetadata(m *trackMetadata) {
+	m.Title = sanitizeString(m.Title)
+	m.Artist = sanitizeString(m.Artist)
+	for i, a := range m.Artists {
+		m.Artists[i] = sanitizeString(a)
+	}
+	m.Album = sanitizeString(m.Album)
+	m.AlbumArtist = sanitizeString(m.AlbumArtist)
+	m.Genre = sanitizeString(m.Genre)
+	m.Composer = sanitizeString(m.Composer)
+	m.Comment = sanitizeString(m.Comment)
+	m.Raw = bytes.ReplaceAll(m.Raw, []byte("\\u0000"), []byte(""))
 }
 
 func splitArtists(value string) []string {
@@ -663,9 +688,18 @@ func splitArtists(value string) []string {
 func cleanRawTags(raw map[string]interface{}) map[string]interface{} {
 	result := make(map[string]interface{}, len(raw))
 	for key, value := range raw {
-		switch value.(type) {
-		case string, float64, int, int64, bool, []string:
-			result[key] = value
+		cleanKey := sanitizeString(key)
+		switch v := value.(type) {
+		case string:
+			result[cleanKey] = sanitizeString(v)
+		case []string:
+			cleaned := make([]string, len(v))
+			for i, s := range v {
+				cleaned[i] = sanitizeString(s)
+			}
+			result[cleanKey] = cleaned
+		case float64, int, int64, bool:
+			result[cleanKey] = value
 		}
 	}
 	return result
