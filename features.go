@@ -421,17 +421,41 @@ func (application *app) addPlaylistTrack(response http.ResponseWriter, request *
 		return
 	}
 	var payload struct {
-		TrackID int64 `json:"trackId"`
+		TrackID  int64   `json:"trackId"`
+		TrackIDs []int64 `json:"trackIds"`
 	}
 	if !decodeJSON(response, request, &payload) {
 		return
 	}
-	_, err := application.db.Exec(request.Context(), `
-		INSERT INTO playlist_tracks (playlist_id, track_id, position, added_by)
-		VALUES ($1, $2, COALESCE((SELECT MAX(position) + 1 FROM playlist_tracks WHERE playlist_id = $1), 0), $3)
-		ON CONFLICT DO NOTHING`, id, payload.TrackID, currentUser.ID)
+	ids := payload.TrackIDs
+	if len(ids) == 0 && payload.TrackID != 0 {
+		ids = []int64{payload.TrackID}
+	}
+	if len(ids) == 0 {
+		writeError(response, http.StatusBadRequest, "Не указаны треки")
+		return
+	}
+	tx, err := application.db.Begin(request.Context())
 	if err != nil {
-		writeError(response, http.StatusBadRequest, "Не удалось добавить трек")
+		writeError(response, http.StatusInternalServerError, "Ошибка сохранения")
+		return
+	}
+	defer tx.Rollback(request.Context())
+	var maxPosition int
+	_ = tx.QueryRow(request.Context(), "SELECT COALESCE(MAX(position), -1) FROM playlist_tracks WHERE playlist_id = $1", id).Scan(&maxPosition)
+	for _, trackID := range ids {
+		maxPosition++
+		_, err = tx.Exec(request.Context(), `
+			INSERT INTO playlist_tracks (playlist_id, track_id, position, added_by)
+			VALUES ($1, $2, $3, $4)
+			ON CONFLICT DO NOTHING`, id, trackID, maxPosition, currentUser.ID)
+		if err != nil {
+			writeError(response, http.StatusBadRequest, "Не удалось добавить треки")
+			return
+		}
+	}
+	if err := tx.Commit(request.Context()); err != nil {
+		writeError(response, http.StatusInternalServerError, "Ошибка сохранения")
 		return
 	}
 	response.WriteHeader(http.StatusNoContent)

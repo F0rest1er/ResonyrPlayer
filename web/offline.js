@@ -94,8 +94,10 @@ const offline = {
           const playlist = data.find((item) => item.id === playlistId);
           if (playlist && operation.method === 'PUT') Object.assign(playlist, payload);
           if (playlist && operation.method !== 'PUT') {
-            const ids = new Set(playlist.trackIds || []);
-            if (operation.method === 'POST') ids.add(payload.trackId);
+            if (operation.method === 'POST') {
+              if (Array.isArray(payload.trackIds)) payload.trackIds.forEach((id) => ids.add(id));
+              else if (payload.trackId) ids.add(payload.trackId);
+            }
             else ids.delete(Number(playlistMatch[2]));
             playlist.trackIds = [...ids];
             playlist.trackCount = ids.size;

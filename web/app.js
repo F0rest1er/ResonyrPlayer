@@ -12,11 +12,14 @@ const state = {
   format: '',
   lastSavedAt: 0,
   pendingTrackId: null,
+  pendingTrackIds: null,
   playlistLayout: localStorage.getItem('playerPlaylistLayout') === 'list' ? 'list' : 'grid',
   queue: [],
   queueIndex: -1,
   repeat: 0,
   removeTrackCover: false,
+  selectMode: false,
+  selectedTrackIds: new Set(),
   shuffle: false,
   sort: '',
   isAdmin: false,
@@ -31,6 +34,7 @@ const elements = Object.fromEntries([
   'fileDropzone', 'filesButton', 'folderForm', 'folderInput', 'folderModal', 'loginError', 'loginForm', 'logoutButton', 'menuButton', 'musicForm', 'musicModal', 'musicPath', 'newBackupButton', 'newFolderButton', 'newPlaylistButton', 'newSourceButton', 'newUserButton', 'nextButton', 'operationsButton', 'playButton', 'playFolderButton',
   'playerArtist', 'playerTitle', 'playlistChoices', 'playlistCoverDropzone', 'playlistCoverInput', 'playlistCoverPicture', 'playlistCoverPreview', 'playlistCoverPrompt', 'playlistForm', 'playlistLayoutControl', 'playlistLayoutSelect', 'playlistModal', 'playlistModalTitle', 'playlistSubmitButton', 'previousButton', 'progressRange', 'repeatButton', 'scanButton', 'searchInput',
   'donationLaterButton', 'donationModal', 'donationNeverButton', 'renameFileForm', 'renameFileModal', 'shuffleButton', 'sortSelect', 'sourceForm', 'sourceModal', 'sourceProvider', 'sourcesButton', 'supportLink', 'themeForm', 'themeModal', 'themeSelect', 'trackCoverDropzone', 'trackCoverInput', 'trackCoverPicture', 'trackCoverPreview', 'trackCoverPrompt', 'trackCoverRemoveButton', 'trackMetadataForm', 'trackMetadataModal', 'trackTechnicalInfo', 'tracks', 'updateBanner', 'updateBannerLink', 'updateBannerText', 'uploadFilesButton', 'uploadFolderButton', 'uploadMusicButton', 'uploadThemeButton', 'userForm', 'userModal', 'username', 'volumeButton', 'volumeRange', 'volumeWaveLarge', 'volumeWaveSmall', 'watchArtistButton',
+  'selectTracksButton', 'selectAllTracksButton', 'addSelectedToPlaylistButton', 'cancelSelectButton',
 ].map((id) => [id, document.getElementById(id)]));
 
 async function api(path, options = {}) {
@@ -513,8 +517,8 @@ async function loadOperations() {
   const updateProgress = document.createElement('p');
   updateProgress.className = 'update-status';
   updateProgress.setAttribute('role', 'status');
-  const updateMessages = { backup: 'Создаётся резервная копия базы…', installing: 'Установка. Плеер временно отключится.', completed: 'Обновление завершено. Перезагрузите страницу.', failed: 'Обновление не завершено. Проверьте журнал процесса на хосте.' };
-  updateProgress.textContent = updateMessages[job.status] || '';
+  const updateMessages = (jobState) => ({ backup: 'Создаётся резервная копия базы…', installing: 'Установка. Плеер временно отключится.', completed: 'Обновление завершено. Перезагрузите страницу.', failed: jobState?.error ? `Ошибка: ${jobState.error}` : 'Обновление не завершено. Проверьте журнал процесса на хосте.' }[jobState?.status] || '');
+  updateProgress.textContent = updateMessages(job);
   const watchUpdate = async () => {
     for (let attempt = 0; attempt < 240 && state.currentView === 'operations' && updateProgress.isConnected; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 5000));
@@ -522,7 +526,7 @@ async function loadOperations() {
         const response = await fetch('/api/admin/update/job', { cache: 'no-store' });
         if (!response.ok) continue;
         const progress = await response.json();
-        updateProgress.textContent = updateMessages[progress.status] || 'Ожидание процесса обновления…';
+        updateProgress.textContent = updateMessages(progress);
         if (!progress.busy) {
           if (progress.status === 'completed') {
             const registration = await navigator.serviceWorker?.getRegistration();
@@ -704,7 +708,13 @@ function setSidebarOpen(open) {
   if (!open && document.querySelector('.sidebar').contains(document.activeElement)) elements.menuButton.focus();
 }
 
+function resetSelectMode() {
+  state.selectMode = false;
+  state.selectedTrackIds.clear();
+}
+
 function setActiveNavigation(action) {
+  resetSelectMode();
   if (action) rememberNavigation(action);
   if (innerWidth <= 760) setSidebarOpen(false);
   document.querySelectorAll('[data-action]').forEach((item) => {
@@ -767,8 +777,9 @@ async function loadLibrary(path, recursive = false) {
   rememberNavigation('home', path);
   state.currentView = 'library';
   state.currentPlaylist = null;
-  showLibraryActions();
+  resetSelectMode();
   renderLibrary(data);
+  showLibraryActions();
   return data.tracks;
 }
 
@@ -820,13 +831,27 @@ function renderTracks(tracks) {
 }
 
 function makeTrack(item, index, tracks) {
+  const isSelected = state.selectedTrackIds.has(item.id);
   const row = document.createElement('div');
-  row.className = `track${state.currentTrack?.id === item.id ? ' track--active' : ''}`;
+  row.className = `track${state.currentTrack?.id === item.id ? ' track--active' : ''}${isSelected ? ' track--selected' : ''}`;
   row.dataset.id = item.id;
 
   const number = document.createElement('span');
   number.className = 'track__number';
-  number.textContent = index + 1;
+  if (state.selectMode) {
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.className = 'track__checkbox';
+    checkbox.checked = isSelected;
+    checkbox.addEventListener('click', (event) => event.stopPropagation());
+    checkbox.addEventListener('change', (event) => {
+      event.stopPropagation();
+      toggleTrackSelection(item.id, row, checkbox.checked);
+    });
+    number.append(checkbox);
+  } else {
+    number.textContent = index + 1;
+  }
   const picture = document.createElement('picture');
   picture.className = 'track__picture';
   const image = document.createElement('img');
@@ -869,6 +894,7 @@ function makeTrack(item, index, tracks) {
   add.addEventListener('click', async (event) => {
     event.stopPropagation();
     state.pendingTrackId = item.id;
+    state.pendingTrackIds = null;
     const playlists = await api('/api/playlists');
     elements.playlistChoices.replaceChildren(...playlists.filter((playlist) => playlist.permission !== 'view').map(makePlaylistChoice));
     elements.addTrackModal.showModal();
@@ -926,8 +952,44 @@ function makeTrack(item, index, tracks) {
   }
   if (state.currentView === 'offline') actions.append(add, favorite);
   row.append(number, picture, info, album, format, actions);
-  row.addEventListener('click', () => requestPlayQueue(tracks, index));
+  row.addEventListener('click', () => {
+    if (state.selectMode) {
+      const checkbox = row.querySelector('.track__checkbox');
+      const nextChecked = !state.selectedTrackIds.has(item.id);
+      if (checkbox) checkbox.checked = nextChecked;
+      toggleTrackSelection(item.id, row, nextChecked);
+      return;
+    }
+    requestPlayQueue(tracks, index);
+  });
   return row;
+}
+
+function updateSelectModeUI() {
+  const count = state.selectedTrackIds.size;
+  elements.addSelectedToPlaylistButton.textContent = `В плейлист (${count})`;
+  elements.addSelectedToPlaylistButton.disabled = count === 0;
+  const allSelected = state.visibleTracks.length > 0 && state.selectedTrackIds.size === state.visibleTracks.length;
+  elements.selectAllTracksButton.textContent = allSelected ? 'Снять выделение' : 'Выбрать все';
+  showLibraryActions();
+}
+
+function setSelectMode(active) {
+  state.selectMode = active;
+  if (!active) state.selectedTrackIds.clear();
+  renderTracks(state.visibleTracks);
+  updateSelectModeUI();
+}
+
+function toggleTrackSelection(id, row, isSelected) {
+  if (isSelected) {
+    state.selectedTrackIds.add(id);
+    row?.classList.add('track--selected');
+  } else {
+    state.selectedTrackIds.delete(id);
+    row?.classList.remove('track--selected');
+  }
+  updateSelectModeUI();
 }
 
 async function requestPlayQueue(tracks, index = 0) {
@@ -1001,6 +1063,11 @@ function syncMediaPosition() {
 
 function showLibraryActions() {
   const downloadedIds = new Set(offlineTracks().map((track) => track.id));
+  const hasTracks = ['library', 'offline', 'favorites', 'history', 'search', 'playlist'].includes(state.currentView) && state.visibleTracks.length > 0;
+  elements.selectTracksButton.hidden = !hasTracks || state.selectMode;
+  elements.selectAllTracksButton.hidden = !hasTracks || !state.selectMode;
+  elements.addSelectedToPlaylistButton.hidden = !hasTracks || !state.selectMode;
+  elements.cancelSelectButton.hidden = !hasTracks || !state.selectMode;
   elements.clearDownloadsButton.hidden = downloadedIds.size === 0 || !['library', 'offline', 'playlists', 'playlist'].includes(state.currentView);
   elements.removePlaylistDownloadsButton.hidden = state.currentView !== 'playlist' || !state.visibleTracks.some((track) => downloadedIds.has(track.id));
   elements.formatSelect.closest('.select').hidden = state.currentView !== 'library';
@@ -1021,13 +1088,14 @@ function showLibraryActions() {
   elements.deletePlaylistButton.hidden = state.currentView !== 'playlist';
   elements.clearNotificationsButton.hidden = state.currentView !== 'notifications';
   elements.enablePushButton.hidden = state.currentView !== 'notifications';
-  elements.playFolderButton.hidden = state.currentView === 'admin' || state.currentView === 'sources' || state.currentView === 'files' || state.currentView === 'operations' || state.currentView === 'releases' || state.currentView === 'playlists' || state.currentView === 'notifications';
+  elements.playFolderButton.hidden = state.selectMode || state.currentView === 'admin' || state.currentView === 'sources' || state.currentView === 'files' || state.currentView === 'operations' || state.currentView === 'releases' || state.currentView === 'playlists' || state.currentView === 'notifications';
   elements.folders.className = state.currentView === 'playlists' && state.playlistLayout === 'list' ? 'folders folders--playlist-list' : 'folders';
   elements.libraryDescription.textContent = state.currentView === 'playlist' ? state.currentPlaylist?.description || '' : '';
   elements.libraryDescription.hidden = !elements.libraryDescription.textContent;
 }
 
 function renderTrackView(title, tracks, view) {
+  resetSelectMode();
   state.currentView = view;
   elements.libraryTitle.textContent = title;
   elements.breadcrumbs.replaceChildren();
@@ -1118,8 +1186,16 @@ function makePlaylistChoice(item) {
   button.className = 'modal__choice';
   button.textContent = item.name;
   button.addEventListener('click', async () => {
-    await api(`/api/playlists/${item.id}/tracks`, { method: 'POST', body: JSON.stringify({ trackId: state.pendingTrackId }) });
+    const payload = state.pendingTrackIds?.length ? { trackIds: state.pendingTrackIds } : { trackId: state.pendingTrackId };
+    await api(`/api/playlists/${item.id}/tracks`, { method: 'POST', body: JSON.stringify(payload) });
     elements.addTrackModal.close();
+    if (state.selectMode) {
+      setSelectMode(false);
+      offline.notify('Треки добавлены в плейлист');
+    }
+    if (state.currentView === 'playlist' && state.currentPlaylist?.id === item.id) {
+      renderTrackView(state.currentPlaylist.name, await api(`/api/playlists/${state.currentPlaylist.id}`), 'playlist');
+    }
   });
   return button;
 }
@@ -1264,6 +1340,26 @@ elements.searchInput.addEventListener('input', async () => {
 elements.playFolderButton.addEventListener('click', async () => {
   const tracks = state.currentView === 'library' ? await loadLibrary(state.currentPath, true) : state.visibleTracks;
   requestPlayQueue(tracks);
+});
+elements.selectTracksButton.addEventListener('click', () => setSelectMode(true));
+elements.cancelSelectButton.addEventListener('click', () => setSelectMode(false));
+elements.selectAllTracksButton.addEventListener('click', () => {
+  const allSelected = state.visibleTracks.length > 0 && state.selectedTrackIds.size === state.visibleTracks.length;
+  if (allSelected) {
+    state.selectedTrackIds.clear();
+  } else {
+    state.visibleTracks.forEach((track) => state.selectedTrackIds.add(track.id));
+  }
+  renderTracks(state.visibleTracks);
+  updateSelectModeUI();
+});
+elements.addSelectedToPlaylistButton.addEventListener('click', async () => {
+  if (state.selectedTrackIds.size === 0) return;
+  state.pendingTrackIds = Array.from(state.selectedTrackIds);
+  state.pendingTrackId = null;
+  const playlists = await api('/api/playlists');
+  elements.playlistChoices.replaceChildren(...playlists.filter((playlist) => playlist.permission !== 'view').map(makePlaylistChoice));
+  elements.addTrackModal.showModal();
 });
 elements.sortSelect.addEventListener('change', () => {
   state.sort = elements.sortSelect.value;

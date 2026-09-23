@@ -73,8 +73,9 @@ func (application *app) webUpdateState() map[string]any {
 	heartbeat, err := os.Stat(filepath.Join(root, "heartbeat"))
 	online := err == nil && time.Since(heartbeat.ModTime()) < 30*time.Second
 	status, _ := os.ReadFile(filepath.Join(root, "status"))
+	lastErr, _ := os.ReadFile(filepath.Join(root, "error"))
 	_, jobErr := os.Stat(filepath.Join(root, "job"))
-	return map[string]any{"workerOnline": online, "busy": jobErr == nil, "status": strings.TrimSpace(string(status)), "currentVersion": version}
+	return map[string]any{"workerOnline": online, "busy": jobErr == nil, "status": strings.TrimSpace(string(status)), "error": strings.TrimSpace(string(lastErr)), "currentVersion": version}
 }
 
 func (application *app) webUpdateStatus(response http.ResponseWriter, _ *http.Request, _ user) {

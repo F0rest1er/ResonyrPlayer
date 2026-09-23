@@ -9,26 +9,24 @@ compose() {
 
 update() {
 
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  printf 'Есть несохранённые изменения. Сначала сохраните их или выполните обновление вручную.\n' >&2
-  exit 1
-fi
 latestTag="${1:-}"
 if [ -n "$latestTag" ]; then
   if [ "${#latestTag}" -gt 80 ] || [ "$latestTag" != "$(printf '%s' "$latestTag" | LC_ALL=C tr -cd 'A-Za-z0-9.-')" ] || ! printf '%s\n' "$latestTag" | LC_ALL=C grep -Eq '^v?[0-9]+\.[0-9]+\.[0-9]+([.-][A-Za-z0-9.-]+)?$'; then
     printf 'Некорректный тег релиза.\n' >&2
     exit 1
   fi
-  git fetch origin "refs/tags/$latestTag:refs/tags/$latestTag"
-  git checkout --detach "$latestTag"
+  git reset --hard HEAD
+  git fetch -f origin "refs/tags/$latestTag:refs/tags/$latestTag"
+  git checkout -f --detach "$latestTag"
 else
-  git fetch --tags --prune origin
+  git reset --hard HEAD
+  git fetch --tags -f origin
   latestTag="$(git tag --sort=-version:refname | sed -n '1p')"
   if [ -n "$latestTag" ]; then
-    git checkout --detach "$latestTag"
+    git checkout -f --detach "$latestTag"
   else
     git fetch origin main
-    git checkout --detach origin/main
+    git checkout -f --detach origin/main
     latestTag="$(git rev-parse --short HEAD)"
   fi
 fi

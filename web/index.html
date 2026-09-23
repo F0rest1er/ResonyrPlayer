@@ -70,7 +70,7 @@
         <button class="toolbar__user" id="accountButton" type="button" title="Настройки аккаунта"><span id="username"></span></button>
       </header>
 
-      <aside class="update-banner" id="updateBanner" hidden><span id="updateBannerText"></span><a class="button button--primary" id="updateBannerLink" target="_blank" rel="noopener noreferrer">Открыть релиз</a></aside>
+      <aside class="update-banner" id="updateBanner" hidden><span class="update-banner__text" id="updateBannerText"></span><a class="button button--primary update-banner__action" id="updateBannerLink" target="_blank" rel="noopener noreferrer">Открыть релиз</a></aside>
 
       <div class="library">
         <p class="offline-status" id="offlineStatus" role="status" aria-live="polite" hidden></p>
@@ -101,6 +101,10 @@
             <button class="button" id="clearNotificationsButton" hidden>Очистить</button>
             <button class="button" id="enablePushButton" hidden>Включить push</button>
             <button class="button button--primary" id="playFolderButton">▶ Слушать всё</button>
+            <button class="button" id="selectTracksButton" hidden>Выбрать треки</button>
+            <button class="button" id="selectAllTracksButton" hidden>Выбрать все</button>
+            <button class="button button--primary" id="addSelectedToPlaylistButton" hidden>В плейлист (0)</button>
+            <button class="button" id="cancelSelectButton" hidden>Отмена</button>
           </div>
         </div>
         <div class="folders" id="folders"></div>

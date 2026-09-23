@@ -37,10 +37,12 @@ while :; do
       *) printf 'origin не совпадает с UPDATE_REPOSITORY.\n' >&2; finishJob failed; continue ;;
     esac
     writeState installing
-    if sh ./update.sh "$requestedTag"; then
+    if output="$(sh ./update.sh "$requestedTag" 2>&1)"; then
       finishJob completed
     else
-      printf 'Обновление не завершено. Проверьте ошибки выше; музыка и база не удалялись.\n' >&2
+      printf '%s\n' "$output" >&2
+      lastLine="$(printf '%s\n' "$output" | tail -n 3 | tr '\n' ' ' | cut -c 1-200)"
+      compose exec -T app sh -c 'printf "%s" "$1" > /data/web-update/error' sh "$lastLine"
       finishJob failed || exit 1
     fi
   fi
