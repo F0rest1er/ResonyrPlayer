@@ -327,15 +327,20 @@ func (application *app) syncSourceHandler(response http.ResponseWriter, request 
 	if !ok {
 		return
 	}
-	if err := application.syncSource(request.Context(), id); err != nil {
-		writeError(response, http.StatusBadGateway, "Синхронизация источника завершилась с ошибкой")
-		return
-	}
-	if err := application.scan(request.Context()); err != nil {
-		writeError(response, http.StatusInternalServerError, "Источник синхронизирован, но медиатека не обновлена")
-		return
-	}
-	response.WriteHeader(http.StatusNoContent)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		if err := application.syncSource(ctx, id); err != nil {
+			go application.notifyAll(context.Background(), "Ошибка источника", "Синхронизация источника завершилась с ошибкой")
+			return
+		}
+		if err := application.scan(ctx); err != nil {
+			go application.notifyAll(context.Background(), "Ошибка медиатеки", "Источник синхронизирован, но медиатека не обновлена")
+			return
+		}
+		go application.notifyAll(context.Background(), "Синхронизация завершена", "Источник музыки успешно обновлён")
+	}()
+	response.WriteHeader(http.StatusAccepted)
 }
 
 func (application *app) syncSources(ctx context.Context) error {

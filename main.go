@@ -681,7 +681,7 @@ func fallback(value, fallbackValue string) string {
 func (application *app) login(response http.ResponseWriter, request *http.Request) {
 	clientIP := requestIP(request)
 	if !application.loginAllowed(clientIP) {
-		writeError(response, http.StatusTooManyRequests, "Слишком много попыток. Повторите через минуту")
+		writeError(response, http.StatusTooManyRequests, "Слишком много неудачных попыток входа. Доступ заблокирован на 1 час")
 		return
 	}
 	var credentials struct {
@@ -1143,11 +1143,11 @@ func (application *app) loginAllowed(ip string) bool {
 	application.loginLock.Lock()
 	defer application.loginLock.Unlock()
 	attempt := application.loginAttempts[ip]
-	if time.Since(attempt.since) >= time.Minute {
+	if time.Since(attempt.since) >= time.Hour {
 		delete(application.loginAttempts, ip)
 		return true
 	}
-	return attempt.count < 10
+	return attempt.count < 3
 }
 
 func (application *app) recordLoginFailure(ip string) {
@@ -1155,13 +1155,13 @@ func (application *app) recordLoginFailure(ip string) {
 	defer application.loginLock.Unlock()
 	if len(application.loginAttempts) > 10000 {
 		for key, value := range application.loginAttempts {
-			if time.Since(value.since) >= time.Minute {
+			if time.Since(value.since) >= time.Hour {
 				delete(application.loginAttempts, key)
 			}
 		}
 	}
 	attempt := application.loginAttempts[ip]
-	if time.Since(attempt.since) >= time.Minute {
+	if time.Since(attempt.since) >= time.Hour {
 		attempt = loginAttempt{since: time.Now()}
 	}
 	attempt.count++

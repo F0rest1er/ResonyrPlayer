@@ -1,4 +1,4 @@
-const shellCache = 'resonyr-shell-v20';
+const shellCache = 'resonyr-shell-v22';
 const shellFiles = ['/', '/style.css', '/offline.js', '/app.js', '/manifest.webmanifest', '/icon.svg', '/icon-32.png', '/icon-180.png', '/icon-192.png', '/icon-512.png', '/icon-maskable-192.png', '/icon-maskable-512.png'];
 
 self.addEventListener('install', (event) => event.waitUntil(Promise.all([caches.open(shellCache).then((cache) => cache.addAll(shellFiles)), self.skipWaiting()])));

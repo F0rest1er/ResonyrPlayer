@@ -23,7 +23,12 @@ const offline = {
     const changed = this.disconnected !== value;
     this.disconnected = value;
     if (changed) window.dispatchEvent(new Event('resonyr-connection'));
-    if (value) this.notify('Нет связи с сервером. Доступна скачанная музыка; изменения сохраняются на устройстве.');
+    const status = document.getElementById('offlineStatus');
+    if (status) {
+      status.hidden = !value;
+      if (value) status.textContent = 'Нет связи с сервером. Доступна скачанная музыка; изменения сохраняются на устройстве.';
+      else status.textContent = '';
+    }
   },
   canQueue(path, method) {
     return (method === 'PUT' && (/^\/api\/tracks\/\d+\/favorite$/.test(path) || path === '/api/playback' || /^\/api\/playlists\/\d+$/.test(path)))
@@ -129,6 +134,12 @@ const offline = {
       }
       return response;
     } catch (error) {
+      if (path !== '/api/me') {
+        try {
+          const probe = await fetch('/api/me', { cache: 'no-store', signal: AbortSignal.timeout(3000) });
+          if (probe.status < 500) throw error;
+        } catch {}
+      }
       if (!error.network && !(error instanceof TypeError)) throw error;
       error.network = true;
       this.setDisconnected(true);

@@ -46,7 +46,7 @@ async function api(path, options = {}) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.error || 'Ошибка запроса');
   }
-  return response.status === 204 ? null : response.json();
+  return (response.status === 204 || response.status === 202) ? null : response.json();
 }
 
 async function start() {
@@ -255,9 +255,19 @@ async function loadSources() {
     sync.textContent = 'Синхронизировать';
     sync.addEventListener('click', async () => {
       sync.disabled = true;
-      try { await api(`/api/admin/sources/${item.id}/sync`, { method: 'POST' }); await loadSources(); }
-      catch (error) { status.textContent = error.message; status.classList.add('source-row__status--error'); }
-      finally { sync.disabled = false; }
+      sync.textContent = 'Синхронизация…';
+      try {
+        await api(`/api/admin/sources/${item.id}/sync`, { method: 'POST' });
+        status.textContent = 'Синхронизация запущена в фоне…';
+        status.classList.remove('source-row__status--error');
+        setTimeout(() => loadSources(), 3000);
+      } catch (error) {
+        status.textContent = error.message;
+        status.classList.add('source-row__status--error');
+      } finally {
+        sync.disabled = false;
+        sync.textContent = 'Синхронизировать';
+      }
     });
     const remove = document.createElement('button');
     remove.className = 'user-row__delete';
@@ -486,18 +496,20 @@ async function loadOperations() {
   elements.libraryTitle.textContent = 'Система';
   elements.breadcrumbs.replaceChildren();
   const updateCard = document.createElement('div');
-  updateCard.className = 'folder';
+  updateCard.className = 'update-card';
   const updateTitle = document.createElement('strong');
-  updateTitle.className = 'folder__name';
+  updateTitle.className = 'update-card__title';
   updateTitle.textContent = update.updateAvailable ? `Доступна версия ${update.latestVersion}` : update.configured ? `Версия ${update.currentVersion} актуальна` : 'Проверка обновлений не настроена';
-  const updateMeta = document.createElement('small');
-  updateMeta.className = 'track__artist';
+  const updateMeta = document.createElement('span');
+  updateMeta.className = 'update-card__meta';
   updateMeta.textContent = update.error || (job.workerOnline ? 'Обновление из браузера подключено' : 'Для обновления запустите на хосте sh web-updater.sh');
   updateCard.append(updateTitle, updateMeta);
+  const updateActions = document.createElement('div');
+  updateActions.className = 'update-card__actions';
   const updateButton = document.createElement('button');
-  updateButton.className = 'button button--primary';
-  updateButton.textContent = job.busy ? 'Обновление выполняется…' : 'Установить обновление';
-  updateButton.disabled = !job.workerOnline || job.busy || !update.updateAvailable;
+  updateButton.className = update.updateAvailable ? 'button button--primary update-card__button' : 'button update-card__button';
+  updateButton.textContent = job.busy ? 'Обновление выполняется…' : update.updateAvailable ? `Установить ${update.latestVersion}` : 'Проверить обновления';
+  updateButton.disabled = job.busy || (update.updateAvailable ? !job.workerOnline : false);
   const updateProgress = document.createElement('p');
   updateProgress.className = 'update-status';
   updateProgress.setAttribute('role', 'status');
@@ -525,6 +537,10 @@ async function loadOperations() {
     }
   };
   updateButton.onclick = async () => {
+    if (!update.updateAvailable) {
+      await loadOperations();
+      return;
+    }
     if (!window.confirm(`Установить ${update.latestVersion}? Будет создана копия базы. Во время обновления воспроизведение прервётся.`)) return;
     updateButton.disabled = true;
     updateProgress.textContent = 'Подготовка и резервное копирование…';
@@ -533,7 +549,8 @@ async function loadOperations() {
       await watchUpdate();
     } catch (error) { updateProgress.textContent = error.message; updateButton.disabled = false; }
   };
-  updateCard.append(updateButton, updateProgress);
+  updateActions.append(updateButton, updateProgress);
+  updateCard.append(updateActions);
   elements.folders.replaceChildren(updateCard, ...backups.map((item) => {
     const link = document.createElement('a');
     link.className = 'folder';
@@ -953,14 +970,16 @@ function syncMediaSession(item) {
   if (!('mediaSession' in navigator) || !item) return;
   const origin = location.origin;
   const artwork = item.hasCover
-    ? [96, 128, 192, 256, 384, 512].map((size) => ({ src: new URL(offline.mediaURL(item.id, 'cover'), origin).href, sizes: `${size}x${size}`, type: 'image/jpeg' }))
+    ? [96, 128, 192, 256, 384, 512].map((size) => ({ src: new URL(offline.mediaURL(item.id, 'cover'), origin).href, sizes: `${size}x${size}` }))
     : [192, 512].map((size) => ({ src: new URL(`/icon-${size}.png`, origin).href, sizes: `${size}x${size}`, type: 'image/png' }));
-  navigator.mediaSession.metadata = new MediaMetadata({
-    title: item.title,
-    artist: item.artist || 'Неизвестный исполнитель',
-    album: item.album || '',
-    artwork,
-  });
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: item.title,
+      artist: item.artist || 'Неизвестный исполнитель',
+      album: item.album || '',
+      artwork,
+    });
+  } catch {}
 }
 
 function syncMediaPlaybackState() {
@@ -1853,7 +1872,14 @@ if ('serviceWorker' in navigator) {
     serviceWorkerRefreshing = true;
     location.reload();
   });
-  navigator.serviceWorker.register('/service-worker.js').catch(() => {});
+  navigator.serviceWorker.register('/service-worker.js').then((registration) => {
+    registration.update();
+  }).catch(() => {});
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') {
+      navigator.serviceWorker.ready.then((reg) => reg.update()).catch(() => {});
+    }
+  });
 }
 window.addEventListener('offline', () => { offline.setDisconnected(true); startOffline(); });
 window.addEventListener('online', () => offline.sync());
