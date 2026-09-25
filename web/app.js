@@ -520,13 +520,14 @@ async function loadOperations() {
   const updateProgress = document.createElement('p');
   updateProgress.className = 'update-status';
   updateProgress.setAttribute('role', 'status');
-  const updateMessages = (jobState) => ({ backup: 'Создаётся резервная копия базы…', installing: 'Установка. Плеер временно отключится.', completed: 'Обновление завершено. Перезагрузите страницу.', failed: jobState?.error ? `Ошибка: ${jobState.error}` : 'Обновление не завершено. Проверьте журнал процесса на хосте.' }[jobState?.status] || '');
+  const updateMessages = (jobState) => ({ backup: 'Создаётся резервная копия базы…', restoring: 'Восстановление базы. Плеер временно отключится.', restored: 'База восстановлена. Перезагрузите страницу и войдите заново.', installing: 'Установка. Плеер временно отключится.', completed: 'Обновление завершено. Перезагрузите страницу.', failed: jobState?.error ? `Ошибка: ${jobState.error}` : 'Операция не завершена. Проверьте журнал процесса на хосте.' }[jobState?.status] || '');
   updateProgress.textContent = updateMessages(job);
   const watchUpdate = async () => {
     for (let attempt = 0; attempt < 240 && state.currentView === 'operations' && updateProgress.isConnected; attempt++) {
       await new Promise((resolve) => setTimeout(resolve, 5000));
       try {
         const response = await fetch('/api/admin/update/job', { cache: 'no-store' });
+        if (response.status === 401) { updateProgress.textContent = 'Сессия завершена. Перезагрузите страницу и войдите заново, чтобы проверить результат.'; return; }
         if (!response.ok) continue;
         const progress = await response.json();
         updateProgress.textContent = updateMessages(progress);
@@ -559,17 +560,46 @@ async function loadOperations() {
   updateActions.append(updateButton, updateProgress);
   updateCard.append(updateActions);
   elements.folders.replaceChildren(updateCard, ...backups.map((item) => {
-    const link = document.createElement('a');
-    link.className = 'folder';
-    link.href = `/api/admin/backups/${encodeURIComponent(item.name)}`;
+    const card = document.createElement('article');
+    card.className = 'backup-card';
+    const info = document.createElement('div');
+    info.className = 'backup-card__info';
     const name = document.createElement('strong');
-    name.className = 'folder__name';
-    name.textContent = item.name;
+    name.className = 'backup-card__title';
+    name.textContent = new Date(item.createdAt).toLocaleString();
     const meta = document.createElement('small');
-    meta.className = 'track__artist';
-    meta.textContent = `${Math.ceil(item.size / 1024)} КБ · ${new Date(item.createdAt).toLocaleString()}`;
-    link.append(name, meta);
-    return link;
+    meta.className = 'backup-card__meta';
+    meta.textContent = `${(item.size / 1024 / 1024).toFixed(1)} МБ · База данных, без музыки`;
+    info.append(name, meta);
+    const actions = document.createElement('div');
+    actions.className = 'backup-card__actions';
+    const url = `/api/admin/backups/${encodeURIComponent(item.name)}`;
+    const download = document.createElement('a');
+    download.className = 'button'; download.href = url; download.textContent = 'Скачать';
+    const restore = document.createElement('button');
+    restore.className = 'button button--primary'; restore.textContent = 'Восстановить';
+    restore.disabled = !job.workerOnline || job.busy;
+    restore.title = job.workerOnline ? 'Заменить базу данных этой копией' : 'Запустите актуальный web-updater.sh на хосте';
+    restore.onclick = async () => {
+      if (!confirm(`Восстановить базу от ${name.textContent}? Аккаунты, плейлисты и настройки вернутся к этому состоянию. Музыка на диске не изменится. Сначала будет сохранена текущая база; плеер временно остановится.`)) return;
+      restore.disabled = true;
+      updateProgress.textContent = 'Подготовка восстановления…';
+      updateProgress.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      try {
+        await api(`${url}/restore`, { method: 'POST', body: JSON.stringify({ confirm: item.name }) });
+        await watchUpdate();
+      } catch (error) { updateProgress.textContent = error.message; restore.disabled = false; }
+    };
+    const remove = document.createElement('button');
+    remove.className = 'button backup-card__delete'; remove.textContent = 'Удалить'; remove.disabled = job.busy;
+    remove.onclick = async () => {
+      if (!confirm(`Удалить резервную копию от ${name.textContent}? Это действие нельзя отменить.`)) return;
+      remove.disabled = true;
+      try { await api(url, { method: 'DELETE' }); await loadOperations(); }
+      catch (error) { updateProgress.textContent = error.message; remove.disabled = false; }
+    };
+    actions.append(download, restore, remove); card.append(info, actions);
+    return card;
   }));
   elements.tracks.hidden = false;
   elements.tracks.className = 'users';
@@ -1078,9 +1108,17 @@ function toggleTrackSelection(id, row, isSelected) {
 }
 
 async function requestPlayQueue(tracks, index = 0) {
-  const queue = state.shuffle ? [...tracks].sort(() => Math.random() - 0.5) : [...tracks];
-  const currentTrack = queue[Math.min(index, queue.length - 1)];
+  const currentTrack = tracks[Math.min(index, tracks.length - 1)];
   if (!currentTrack) return;
+  const queue = [...tracks];
+  if (state.shuffle) {
+    for (let position = queue.length - 1; position > 0; position--) {
+      const randomIndex = Math.floor(Math.random() * (position + 1));
+      [queue[position], queue[randomIndex]] = [queue[randomIndex], queue[position]];
+    }
+    queue.splice(queue.indexOf(currentTrack), 1);
+    queue.unshift(currentTrack);
+  }
   state.queue = queue;
   state.queueIndex = queue.indexOf(currentTrack);
   state.currentTrack = currentTrack;
@@ -1249,6 +1287,8 @@ function makePlaylist(item) {
   picture.className = 'playlist-card__picture';
   const image = document.createElement('img');
   image.className = 'playlist-card__image';
+  image.loading = 'lazy';
+  image.decoding = 'async';
   image.src = item.hasCover ? `/api/playlists/${item.id}/cover` : '/icon.svg';
   image.alt = `Обложка плейлиста «${item.name}»`;
   picture.append(image);
@@ -1402,7 +1442,13 @@ function updateRemotePlayButton(isPlaying) {
 
 function move(direction) {
   if (!state.queue.length) return;
-  state.queueIndex = (state.queueIndex + direction + state.queue.length) % state.queue.length;
+  if (direction < 0 && elements.audio.currentTime > 3) {
+    elements.audio.currentTime = 0;
+    elements.audio.play().catch(() => {});
+    persistPlayback();
+    return;
+  }
+  state.queueIndex = direction < 0 ? Math.max(0, state.queueIndex - 1) : (state.queueIndex + 1) % state.queue.length;
   playCurrent();
 }
 
@@ -2021,17 +2067,36 @@ elements.colorModeSelect.addEventListener('change', async () => {
 elements.deviceSelect.addEventListener('change', async () => {
   await api('/api/devices/active', { method: 'PUT', body: JSON.stringify({ id: elements.deviceSelect.value }) });
 });
+const nowPlaying = document.getElementById('nowPlaying');
+const playerTrack = document.getElementById('playerTrack');
+const playerParts = [...document.querySelectorAll('.player > .player__track, .player > .player__center, .player > .player__right')];
+function openNowPlaying() {
+  if (nowPlaying.open) return;
+  document.getElementById('nowPlayingContent').append(...playerParts);
+  nowPlaying.showModal();
+}
+playerTrack.addEventListener('click', openNowPlaying);
+playerTrack.addEventListener('keydown', (event) => {
+  if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openNowPlaying(); }
+});
+document.getElementById('closeNowPlaying').addEventListener('click', () => nowPlaying.close());
+nowPlaying.addEventListener('close', () => {
+  elements.audio.before(...playerParts);
+  playerTrack.focus();
+});
 elements.playButton.addEventListener('click', () => sendControl('toggle'));
 elements.previousButton.addEventListener('click', () => sendControl('previous'));
 elements.nextButton.addEventListener('click', () => sendControl('next'));
 elements.shuffleButton.addEventListener('click', () => {
   state.shuffle = !state.shuffle;
   elements.shuffleButton.classList.toggle('icon-button--active', state.shuffle);
+  elements.shuffleButton.setAttribute('aria-pressed', String(state.shuffle));
 });
 elements.repeatButton.addEventListener('click', () => {
   state.repeat = (state.repeat + 1) % 3;
   elements.repeatButton.textContent = state.repeat === 1 ? '↻₁' : '↻';
   elements.repeatButton.classList.toggle('icon-button--active', state.repeat > 0);
+  elements.repeatButton.setAttribute('aria-label', ['Повтор выключен', 'Повтор трека', 'Повтор очереди'][state.repeat]);
 });
 elements.audio.addEventListener('play', () => { updatePlayButton(); persistPlayback(); syncMediaPlaybackState(); syncMediaPosition(); });
 elements.audio.addEventListener('pause', () => { updatePlayButton(); persistPlayback(); syncMediaPlaybackState(); syncMediaPosition(); });

@@ -120,7 +120,7 @@
     </section>
 
     <footer class="player glass">
-      <div class="player__track">
+      <div class="player__track" id="playerTrack" role="button" tabindex="0" aria-label="Открыть плеер" aria-haspopup="dialog">
         <div class="cover">
           <picture class="cover__picture"><img class="cover__image" id="coverImage" alt="" hidden></picture>
           <span class="cover__placeholder" id="coverPlaceholder">♫</span>
@@ -154,6 +154,12 @@
       <audio id="audio" preload="metadata"></audio>
     </footer>
   </div>
+
+  <dialog class="now-playing" id="nowPlaying" aria-label="Сейчас играет">
+    <button class="icon-button now-playing__close" id="closeNowPlaying" aria-label="Свернуть плеер">⌄</button>
+    <p class="now-playing__heading">Сейчас играет</p>
+    <div class="now-playing__content" id="nowPlayingContent"></div>
+  </dialog>
 
   <dialog class="modal" id="playlistModal">
     <form class="modal__content" id="playlistForm">

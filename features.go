@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"image"
-	_ "image/jpeg"
+	"image/color"
+	"image/jpeg"
 	_ "image/png"
 	"io"
 	"net/http"
@@ -281,6 +284,16 @@ func (application *app) playlistCover(response http.ResponseWriter, request *htt
 	}
 	response.Header().Set("Content-Type", contentType)
 	response.Header().Set("Cache-Control", "private, no-cache")
+	coverTag := fmt.Sprintf(`"preview640-%x"`, sha256.Sum256(data))
+	response.Header().Set("ETag", coverTag)
+	if request.Header.Get("If-None-Match") == coverTag {
+		response.WriteHeader(http.StatusNotModified)
+		return
+	}
+	if preview, err := compactPlaylistCover(data); err == nil {
+		data = preview
+		response.Header().Set("Content-Type", http.DetectContentType(data))
+	}
 	_, _ = response.Write(data)
 }
 
@@ -306,6 +319,11 @@ func (application *app) updatePlaylistCover(response http.ResponseWriter, reques
 		writeError(response, http.StatusBadRequest, "Нужна квадратная JPEG или PNG от 128 до 2048 px")
 		return
 	}
+	if data, err = compactPlaylistCover(data); err != nil {
+		writeError(response, http.StatusBadRequest, "Не удалось обработать обложку")
+		return
+	}
+	contentType = http.DetectContentType(data)
 	if _, err = application.db.Exec(request.Context(), "UPDATE playlists SET cover = $1, cover_mime = $2 WHERE id = $3", data, contentType, id); err != nil {
 		writeError(response, http.StatusInternalServerError, "Не удалось сохранить обложку")
 		return
@@ -317,6 +335,43 @@ func playlistCoverValid(data []byte) (string, bool) {
 	contentType := http.DetectContentType(data)
 	config, _, err := image.DecodeConfig(bytes.NewReader(data))
 	return contentType, err == nil && (contentType == "image/jpeg" || contentType == "image/png") && config.Width == config.Height && config.Width >= 128 && config.Width <= 2048
+}
+
+func compactPlaylistCover(data []byte) ([]byte, error) {
+	config, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	width := config.Width
+	if width <= 640 {
+		return data, nil
+	}
+	if width > 2048 || config.Height != width {
+		return nil, errors.New("invalid cover size")
+	}
+	source, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	target := image.NewRGBA(image.Rect(0, 0, 640, 640))
+	for y := 0; y < 640; y++ {
+		for x := 0; x < 640; x++ {
+			var red, green, blue, count uint64
+			for sourceY := y * width / 640; sourceY < (y+1)*width/640; sourceY++ {
+				for sourceX := x * width / 640; sourceX < (x+1)*width/640; sourceX++ {
+					r, g, b, _ := source.At(sourceX, sourceY).RGBA()
+					red += uint64(r)
+					green += uint64(g)
+					blue += uint64(b)
+					count++
+				}
+			}
+			target.SetRGBA(x, y, color.RGBA{uint8(red / count >> 8), uint8(green / count >> 8), uint8(blue / count >> 8), 255})
+		}
+	}
+	var output bytes.Buffer
+	err = jpeg.Encode(&output, target, &jpeg.Options{Quality: 85})
+	return output.Bytes(), err
 }
 
 func (application *app) createPlaylist(response http.ResponseWriter, request *http.Request, currentUser user) {

@@ -357,6 +357,11 @@ func (application *app) syncSources(ctx context.Context) error {
 		}
 	}
 	errorsFound := []error{}
+	rowsErr := rows.Err()
+	rows.Close()
+	if rowsErr != nil {
+		return rowsErr
+	}
 	for _, id := range ids {
 		if err := application.syncSource(ctx, id); err != nil {
 			errorsFound = append(errorsFound, fmt.Errorf("источник %d: %w", id, err))
@@ -366,6 +371,11 @@ func (application *app) syncSources(ctx context.Context) error {
 }
 
 func (application *app) syncSource(ctx context.Context, id int64) error {
+	// ponytail: одна синхронизация за раз; отдельные блокировки источников нужны при росте нагрузки.
+	if !application.cloudSyncLock.TryLock() {
+		return errors.New("синхронизация уже выполняется; повторите позже")
+	}
+	defer application.cloudSyncLock.Unlock()
 	var providerName, remotePath string
 	var encrypted []byte
 	if err := application.db.QueryRow(ctx, "SELECT provider, remote_path, config FROM music_sources WHERE id = $1", id).Scan(&providerName, &remotePath, &encrypted); err != nil {
@@ -410,7 +420,9 @@ func (application *app) syncSource(ctx context.Context, id int64) error {
 		err = syncer.writeManifest()
 	}
 	if err == nil {
+		application.scanLock.Lock()
 		err = replaceCloudDirectory(destination, staging)
+		application.scanLock.Unlock()
 		if err == nil {
 			staging = ""
 		}
@@ -489,7 +501,10 @@ func linkOrCopyCloudFile(source, destination string) error {
 		return err
 	}
 	_, copyErr := io.Copy(output, input)
-	return errors.Join(copyErr, output.Close())
+	if err := errors.Join(copyErr, output.Close()); err != nil {
+		return err
+	}
+	return os.Chtimes(destination, info.ModTime(), info.ModTime())
 }
 
 func replaceCloudDirectory(destination, staging string) error {

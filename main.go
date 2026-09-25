@@ -43,6 +43,8 @@ type app struct {
 	loginLock     sync.Mutex
 	musicDir      string
 	scanLock      sync.Mutex
+	cloudSyncLock sync.Mutex
+	backupLock    sync.Mutex
 	secretKey     []byte
 	uploadsDir    string
 	vapidKeys     *webpush.VAPIDKeys
@@ -149,12 +151,14 @@ func main() {
 	if err := application.ensureAdmin(ctx); err != nil {
 		log.Fatal(err)
 	}
-	if err := application.syncSources(ctx); err != nil {
-		log.Printf("первичная синхронизация источников: %v", err)
-	}
-	if err := application.scan(ctx); err != nil {
-		log.Printf("первичное сканирование: %v", err)
-	}
+	go func() {
+		if err := application.syncSources(ctx); err != nil {
+			log.Printf("первичная синхронизация источников: %v", err)
+		}
+		if err := application.scan(ctx); err != nil {
+			log.Printf("первичное сканирование: %v", err)
+		}
+	}()
 	go application.scanLoop(ctx)
 	go application.releaseLoop(ctx)
 	go application.backupLoop(ctx)
@@ -225,6 +229,8 @@ func main() {
 	mux.HandleFunc("GET /api/admin/backups", application.authAdmin(application.backups))
 	mux.HandleFunc("POST /api/admin/backups", application.authAdmin(application.createBackup))
 	mux.HandleFunc("GET /api/admin/backups/{name}", application.authAdmin(application.downloadBackup))
+	mux.HandleFunc("DELETE /api/admin/backups/{name}", application.authAdmin(application.deleteBackup))
+	mux.HandleFunc("POST /api/admin/backups/{name}/restore", application.authAdmin(application.restoreBackup))
 	mux.HandleFunc("GET /api/admin/update", application.authAdmin(application.updateStatus))
 	mux.HandleFunc("POST /api/admin/update", application.authAdmin(application.startWebUpdate))
 	mux.HandleFunc("GET /api/admin/update/job", application.authAdmin(application.webUpdateStatus))
@@ -447,17 +453,36 @@ func (application *app) ensureAdmin(ctx context.Context) error {
 func (application *app) scan(ctx context.Context) error {
 	application.scanLock.Lock()
 	defer application.scanLock.Unlock()
+	indexed := map[string]indexedTrack{}
+	indexRows, err := application.db.Query(ctx, "SELECT path, size, modified_at FROM tracks WHERE metadata_version = 1")
+	if err != nil {
+		return err
+	}
+	for indexRows.Next() {
+		var path string
+		var item indexedTrack
+		if err := indexRows.Scan(&path, &item.size, &item.modified); err != nil {
+			indexRows.Close()
+			return err
+		}
+		indexed[path] = item
+	}
+	indexErr := indexRows.Err()
+	indexRows.Close()
+	if indexErr != nil {
+		return indexErr
+	}
 	if err := os.MkdirAll(application.musicDir, 0o755); err != nil {
 		return err
 	}
 	seen := make([]string, 0)
-	if err := application.scanRoot(ctx, application.musicDir, "", &seen); err != nil {
+	if err := application.scanRoot(ctx, application.musicDir, "", &seen, indexed); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(application.uploadsDir, 0o750); err != nil {
 		return err
 	}
-	if err := application.scanRoot(ctx, application.uploadsDir, "Загрузки", &seen); err != nil {
+	if err := application.scanRoot(ctx, application.uploadsDir, "Загрузки", &seen, indexed); err != nil {
 		return err
 	}
 	rows, err := application.db.Query(ctx, "SELECT id, name FROM music_sources WHERE remote_name = 'native' ORDER BY id")
@@ -482,7 +507,7 @@ func (application *app) scan(ctx context.Context) error {
 		if _, err := os.Stat(application.sourceDir(source.id)); errors.Is(err, os.ErrNotExist) {
 			continue
 		}
-		if err := application.scanRoot(ctx, application.sourceDir(source.id), "Облако/"+source.name, &seen); err != nil {
+		if err := application.scanRoot(ctx, application.sourceDir(source.id), "Облако/"+source.name, &seen, indexed); err != nil {
 			return err
 		}
 	}
@@ -494,7 +519,12 @@ func (application *app) scan(ctx context.Context) error {
 	return err
 }
 
-func (application *app) scanRoot(ctx context.Context, root, prefix string, seen *[]string) error {
+type indexedTrack struct {
+	size     int64
+	modified time.Time
+}
+
+func (application *app) scanRoot(ctx context.Context, root, prefix string, seen *[]string, indexed map[string]indexedTrack) error {
 	root, err := filepath.Abs(root)
 	if err != nil {
 		return err
@@ -520,12 +550,8 @@ func (application *app) scanRoot(ctx context.Context, root, prefix string, seen 
 			libraryPath = prefix + "/" + relativePath
 		}
 		*seen = append(*seen, libraryPath)
-		var current bool
-		err = application.db.QueryRow(ctx, `SELECT EXISTS(
-			SELECT 1 FROM tracks WHERE path = $1 AND size = $2 AND modified_at = $3 AND metadata_version = 1
-		)`, libraryPath, info.Size(), info.ModTime()).Scan(&current)
-		if err != nil || current {
-			return err
+		if current, ok := indexed[libraryPath]; ok && current.size == info.Size() && current.modified.Equal(info.ModTime().Truncate(time.Microsecond)) {
+			return nil
 		}
 		metadata := readTrackMetadata(ctx, path, relativePath)
 		_, err = application.db.Exec(ctx, `

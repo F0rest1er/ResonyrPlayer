@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -84,12 +85,21 @@ func (application *app) downloadBackup(response http.ResponseWriter, request *ht
 }
 
 func (application *app) createBackupFile(ctx context.Context) (backupFile, error) {
+	application.backupLock.Lock()
+	defer application.backupLock.Unlock()
 	root := filepath.Join(application.dataDir, "backups")
 	if err := os.MkdirAll(root, 0o750); err != nil {
 		return backupFile{}, err
 	}
-	name := "player-" + time.Now().UTC().Format("20060102-150405") + ".dump"
+	name := "player-" + time.Now().UTC().Format("20060102-150405.000000000") + ".dump"
 	path := filepath.Join(root, name)
+	reserved, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return backupFile{}, err
+	}
+	if err := reserved.Close(); err != nil {
+		return backupFile{}, err
+	}
 	command := exec.CommandContext(ctx, "pg_dump", "--dbname", env("DATABASE_URL", ""), "--format", "custom", "--file", path)
 	if output, err := command.CombinedOutput(); err != nil {
 		_ = os.Remove(path)
@@ -150,12 +160,93 @@ func (application *app) backupLoop(ctx context.Context) {
 	}
 }
 
+func (application *app) deleteBackup(response http.ResponseWriter, request *http.Request, _ user) {
+	name := request.PathValue("name")
+	if !backupNameValid(name) {
+		writeError(response, http.StatusBadRequest, "Некорректное имя копии")
+		return
+	}
+	application.backupLock.Lock()
+	defer application.backupLock.Unlock()
+	if application.webUpdateState()["busy"] == true {
+		writeError(response, http.StatusConflict, "Дождитесь завершения обслуживания")
+		return
+	}
+	err := os.Remove(filepath.Join(application.dataDir, "backups", name))
+	if errors.Is(err, os.ErrNotExist) {
+		writeError(response, http.StatusNotFound, "Копия не найдена")
+		return
+	}
+	if err != nil {
+		writeError(response, http.StatusInternalServerError, "Не удалось удалить копию")
+		return
+	}
+	response.WriteHeader(http.StatusNoContent)
+}
+
+func (application *app) restoreBackup(response http.ResponseWriter, request *http.Request, _ user) {
+	name := request.PathValue("name")
+	var payload struct {
+		Confirm string `json:"confirm"`
+	}
+	if !decodeJSON(response, request, &payload) {
+		return
+	}
+	if !backupNameValid(name) || payload.Confirm != name {
+		writeError(response, http.StatusBadRequest, "Подтвердите выбранную копию")
+		return
+	}
+	if application.webUpdateState()["workerOnline"] != true {
+		writeError(response, http.StatusServiceUnavailable, "Запустите актуальный web-updater.sh на хосте")
+		return
+	}
+	root := filepath.Join(application.dataDir, "web-update")
+	job := filepath.Join(root, "job")
+	if os.Mkdir(job, 0o700) != nil {
+		writeError(response, http.StatusConflict, "Уже выполняется обслуживание")
+		return
+	}
+	application.backupLock.Lock()
+	path := filepath.Join(application.dataDir, "backups", name)
+	info, err := os.Lstat(path)
+	if err == nil && !info.Mode().IsRegular() {
+		err = errors.New("invalid backup file")
+	}
+	if err == nil {
+		err = os.Link(path, filepath.Join(job, "restore.dump"))
+	}
+	application.backupLock.Unlock()
+	if err == nil {
+		_ = os.WriteFile(filepath.Join(root, "status"), []byte("backup"), 0o600)
+		_ = os.Remove(filepath.Join(root, "error"))
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		_, err = application.createBackupFile(ctx)
+		cancel()
+	}
+	if err == nil {
+		err = os.WriteFile(filepath.Join(job, "pending"), []byte("restore"), 0o600)
+	}
+	if err == nil {
+		err = os.Rename(filepath.Join(job, "pending"), filepath.Join(job, "ready"))
+	}
+	if err != nil {
+		for _, file := range []string{"pending", "restore.dump"} {
+			_ = os.Remove(filepath.Join(job, file))
+		}
+		_ = os.Remove(job)
+		_ = os.WriteFile(filepath.Join(root, "status"), []byte("failed"), 0o600)
+		writeError(response, http.StatusInternalServerError, "Не удалось подготовить восстановление. База не изменена")
+		return
+	}
+	writeJSON(response, http.StatusAccepted, map[string]string{"status": "queued"})
+}
+
 func backupNameValid(value string) bool {
-	if !strings.HasPrefix(value, "player-") || !strings.HasSuffix(value, ".dump") || len(value) != len("player-20060102-150405.dump") {
+	if !strings.HasPrefix(value, "player-") || !strings.HasSuffix(value, ".dump") || (len(value) != len("player-20060102-150405.dump") && len(value) != len("player-20060102-150405.000000000.dump")) {
 		return false
 	}
 	for _, char := range strings.TrimSuffix(strings.TrimPrefix(value, "player-"), ".dump") {
-		if (char < '0' || char > '9') && char != '-' {
+		if (char < '0' || char > '9') && char != '-' && char != '.' {
 			return false
 		}
 	}
