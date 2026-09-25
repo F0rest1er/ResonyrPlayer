@@ -777,7 +777,7 @@ async function loadThemes(activeTheme = elements.themeSelect.value) {
   elements.themeSelect.replaceChildren(...themes.map((theme) => {
     const option = document.createElement('option');
     option.value = theme.id;
-    option.textContent = `Оформление: ${theme.name}`;
+    option.textContent = theme.name;
     return option;
   }));
   elements.themeSelect.value = activeTheme;
@@ -1122,6 +1122,7 @@ async function requestPlayQueue(tracks, index = 0) {
   state.queue = queue;
   state.queueIndex = queue.indexOf(currentTrack);
   state.currentTrack = currentTrack;
+  renderNowPlayingQueue();
   const playLocally = isOutputDevice();
   if (offline.disconnected) {
     playCurrent();
@@ -1152,6 +1153,7 @@ function playCurrent() {
 }
 
 function syncMediaSession(item) {
+  renderNowPlayingQueue();
   if (!('mediaSession' in navigator) || !item) return;
   const origin = location.origin;
   const artwork = item.hasCover
@@ -2070,11 +2072,52 @@ elements.deviceSelect.addEventListener('change', async () => {
 const nowPlaying = document.getElementById('nowPlaying');
 const playerTrack = document.getElementById('playerTrack');
 const playerParts = [...document.querySelectorAll('.player > .player__track, .player > .player__center, .player > .player__right')];
+function renderNowPlayingQueue() {
+  if (!document.getElementById('nowPlaying').open) return;
+  const queueList = document.getElementById('nowPlayingQueue');
+  const upcomingTracks = state.queue.slice(state.queueIndex + 1);
+  document.getElementById('nowPlayingQueueEmpty').hidden = upcomingTracks.length > 0;
+  queueList.replaceChildren(...upcomingTracks.map((item) => {
+    const row = document.createElement('li');
+    row.className = 'now-playing__queue-track';
+    const picture = document.createElement('picture');
+    picture.className = 'now-playing__queue-cover';
+    if (item.hasCover) {
+      const image = document.createElement('img');
+      image.src = offline.mediaURL(item.id, 'cover');
+      image.alt = ''; image.loading = 'lazy'; image.decoding = 'async';
+      picture.append(image);
+    } else picture.textContent = '♪';
+    const info = document.createElement('span');
+    info.className = 'now-playing__queue-info';
+    const title = document.createElement('span');
+    title.className = 'now-playing__queue-title'; title.textContent = item.title;
+    const artist = document.createElement('span');
+    artist.className = 'now-playing__queue-artist'; artist.textContent = item.artist || 'Неизвестный исполнитель';
+    info.append(title, artist); row.append(picture, info);
+    return row;
+  }));
+}
 function openNowPlaying() {
   if (nowPlaying.open) return;
   document.getElementById('nowPlayingContent').append(...playerParts);
   nowPlaying.showModal();
+  nowPlaying.scrollTop = 0;
+  renderNowPlayingQueue();
 }
+let playerSwipeStart = null;
+nowPlaying.addEventListener('touchstart', (event) => {
+  playerSwipeStart = event.touches.length === 1 && nowPlaying.scrollTop <= 0 && !event.target.closest('button, input, select, a')
+    ? { x: event.touches[0].clientX, y: event.touches[0].clientY } : null;
+}, { passive: true });
+nowPlaying.addEventListener('touchend', (event) => {
+  if (!playerSwipeStart) return;
+  const touch = event.changedTouches[0];
+  const distanceY = touch.clientY - playerSwipeStart.y;
+  if (distanceY > 80 && distanceY > Math.abs(touch.clientX - playerSwipeStart.x) * 1.5) nowPlaying.close();
+  playerSwipeStart = null;
+}, { passive: true });
+nowPlaying.addEventListener('touchcancel', () => { playerSwipeStart = null; }, { passive: true });
 playerTrack.addEventListener('click', openNowPlaying);
 playerTrack.addEventListener('keydown', (event) => {
   if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openNowPlaying(); }
@@ -2101,10 +2144,14 @@ elements.repeatButton.addEventListener('click', () => {
 elements.audio.addEventListener('play', () => { updatePlayButton(); persistPlayback(); syncMediaPlaybackState(); syncMediaPosition(); });
 elements.audio.addEventListener('pause', () => { updatePlayButton(); persistPlayback(); syncMediaPlaybackState(); syncMediaPosition(); });
 elements.audio.addEventListener('durationchange', syncMediaPosition);
+let timelineEditing = false;
+let timelineChanged = false;
 elements.audio.addEventListener('timeupdate', () => {
-  elements.currentTime.textContent = formatTime(elements.audio.currentTime);
+  if (!timelineEditing) {
+    elements.currentTime.textContent = formatTime(elements.audio.currentTime);
+    elements.progressRange.value = Number.isFinite(elements.audio.duration) && elements.audio.duration > 0 ? (elements.audio.currentTime / elements.audio.duration) * 100 : 0;
+  }
   elements.duration.textContent = formatTime(elements.audio.duration);
-  elements.progressRange.value = elements.audio.duration ? (elements.audio.currentTime / elements.audio.duration) * 100 : 0;
   syncMediaPosition();
   if (Date.now() - state.lastSavedAt > 5000) {
     state.lastSavedAt = Date.now();
@@ -2115,8 +2162,22 @@ elements.audio.addEventListener('ended', () => {
   if (state.repeat === 1) playCurrent();
   else if (state.queueIndex < state.queue.length - 1 || state.repeat === 2) move(1);
 });
+elements.progressRange.addEventListener('pointerdown', () => { timelineEditing = true; timelineChanged = false; });
+elements.progressRange.addEventListener('pointerup', () => { if (!timelineChanged) timelineEditing = false; });
+elements.progressRange.addEventListener('pointercancel', () => { timelineEditing = false; timelineChanged = false; });
+elements.progressRange.addEventListener('blur', () => { timelineEditing = false; timelineChanged = false; });
 elements.progressRange.addEventListener('input', () => {
-  if (elements.audio.duration) sendControl('seek', elements.audio.duration * Number(elements.progressRange.value) / 100);
+  timelineEditing = true;
+  timelineChanged = true;
+  elements.currentTime.textContent = formatTime(elements.audio.duration * Number(elements.progressRange.value) / 100);
+});
+elements.progressRange.addEventListener('change', async () => {
+  try {
+    if (Number.isFinite(elements.audio.duration) && elements.audio.duration > 0) {
+      await sendControl('seek', elements.audio.duration * Number(elements.progressRange.value) / 100);
+    }
+  } catch (error) { offline.notify(error.message); }
+  finally { timelineEditing = false; timelineChanged = false; }
 });
 const rawVolume = localStorage.getItem('resonyrVolume');
 const parsedVolume = rawVolume !== null ? parseFloat(rawVolume) : NaN;

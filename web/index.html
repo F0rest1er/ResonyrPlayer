@@ -65,9 +65,7 @@
           <span class="search__icon" aria-hidden="true"></span>
           <input class="search__input" id="searchInput" type="search" placeholder="Треки, исполнители, альбомы" aria-label="Поиск">
         </div>
-        <select class="control-select toolbar__theme" id="colorModeSelect" aria-label="Режим яркости"><option value="system">Режим: системный</option><option value="light">Режим: светлый</option><option value="dark">Режим: тёмный</option></select>
-        <select class="control-select toolbar__theme" id="themeSelect" aria-label="Оформление"></select>
-        <button class="toolbar__user" id="accountButton" type="button" title="Настройки аккаунта"><span id="username"></span></button>
+        <button class="toolbar__user" id="accountButton" type="button" title="Настройки" aria-label="Настройки"><svg class="toolbar__settings-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16M8 4v6M16 14v6"/></svg><span id="username"></span></button>
       </header>
 
       <aside class="update-banner" id="updateBanner" hidden><span class="update-banner__text" id="updateBannerText"></span><a class="button button--primary update-banner__action" id="updateBannerLink" target="_blank" rel="noopener noreferrer">Открыть релиз</a></aside>
@@ -140,7 +138,7 @@
         </div>
         <div class="progress">
           <span class="progress__time" id="currentTime">0:00</span>
-          <input class="progress__range" id="progressRange" type="range" min="0" max="100" value="0" aria-label="Позиция">
+          <input class="progress__range" id="progressRange" type="range" min="0" max="100" step="0.01" value="0" aria-label="Позиция">
           <span class="progress__time" id="duration">0:00</span>
         </div>
       </div>
@@ -156,9 +154,10 @@
   </div>
 
   <dialog class="now-playing" id="nowPlaying" aria-label="Сейчас играет">
-    <button class="icon-button now-playing__close" id="closeNowPlaying" aria-label="Свернуть плеер">⌄</button>
+    <button class="icon-button now-playing__close" id="closeNowPlaying" aria-label="Свернуть плеер"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 9 7 7 7-7"/></svg></button>
     <p class="now-playing__heading">Сейчас играет</p>
     <div class="now-playing__content" id="nowPlayingContent"></div>
+    <section class="now-playing__queue" aria-labelledby="queueHeading"><h2 class="now-playing__queue-heading" id="queueHeading">Далее в очереди</h2><ol class="now-playing__queue-list" id="nowPlayingQueue"></ol><p class="now-playing__queue-empty" id="nowPlayingQueueEmpty">Следующих треков нет</p></section>
   </dialog>
 
   <dialog class="modal" id="playlistModal">
@@ -278,6 +277,13 @@ assets/ (необязательно)</pre>
   </dialog>
 
   <dialog class="modal" id="accountModal">
+    <section class="modal__content settings" aria-label="Оформление">
+      <h2 class="modal__title">Настройки</h2>
+      <label class="field"><span class="field__label">Режим яркости</span><select class="field__input" id="colorModeSelect"><option value="system">Системный</option><option value="light">Светлый</option><option value="dark">Тёмный</option></select></label>
+      <label class="field"><span class="field__label">Оформление</span><select class="field__input" id="themeSelect"></select></label>
+      <p class="modal__text">Оформление сохраняется сразу. Пароль для этого не нужен.</p>
+      <button class="button" type="button" data-close="accountModal">Закрыть</button>
+    </section>
     <form class="modal__content" id="accountForm">
       <h2 class="modal__title">Настройки аккаунта</h2>
       <label class="field"><span class="field__label">Логин</span><input class="field__input" name="username" minlength="3" maxlength="64" autocomplete="username" required></label>

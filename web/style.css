@@ -282,8 +282,8 @@ button { border: 0; }
 .icon-button--active { color: var(--accent); }
 .play-button { width: 37px; height: 37px; border-radius: 50%; background: var(--text); color: var(--background); }
 .progress { display: flex; align-items: center; gap: 9px; }
-.progress__range { width: 100%; height: 3px; accent-color: var(--accent); cursor: pointer; }
-.progress__time { width: 34px; color: var(--muted); font-size: 10px; }
+.progress__range { flex: 1; min-width: 0; width: 100%; height: 3px; accent-color: var(--accent); cursor: pointer; }
+.progress__time { flex: 0 0 42px; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 10px; }
 .progress__time:last-child { text-align: right; }
 .player__right { display: grid; justify-items: end; gap: 8px; }
 .device-picker { display: flex; width: min(190px, 100%); align-items: center; gap: 7px; }
@@ -306,7 +306,6 @@ button { border: 0; }
   .library__heading { align-items: start; flex-direction: column; }
   .library__actions { width: 100%; flex-wrap: wrap; }
   .toolbar { padding-inline: 22px; gap: 10px; }
-  #themeSelect { display: none; }
   .player { grid-template-columns: minmax(170px, 1fr) minmax(300px, 1.4fr) minmax(150px, .8fr); gap: 14px; }
 }
 
@@ -336,8 +335,7 @@ button { border: 0; }
   .toolbar { gap: 8px; padding: 12px 14px; }
   .update-banner { align-items: stretch; flex-direction: column; margin-inline: 14px; gap: 10px; padding: 12px 14px; }
   .update-banner__action { width: 100%; min-height: 38px; }
-  .toolbar__user { display: none; }
-  #themeSelect { display: none; }
+  .toolbar__user #username { display: none; }
   .toolbar__theme { width: 92px; }
   .search__input { min-width: 0; }
   .library { padding: 16px 16px 180px; }
@@ -381,6 +379,19 @@ button { border: 0; }
 .now-playing { width: min(100%, 560px); max-width: 100%; height: 100dvh; max-height: 100dvh; margin: auto; padding: max(20px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom)); border: 0; background: var(--surface-solid); color: var(--text); overflow-y: auto; }
 .now-playing::backdrop { background: #000b; backdrop-filter: blur(12px); }
 .now-playing__close { position: absolute; left: 16px; top: max(12px, env(safe-area-inset-top)); }
+.now-playing__close svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.toolbar__user { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-width: 44px; min-height: 44px; }
+.toolbar__settings-icon { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.settings { border-bottom: 1px solid var(--line); }
+.now-playing__queue { max-width: 420px; margin: 32px auto 0; border-top: 1px solid var(--line); padding-top: 20px; }
+.now-playing__queue-heading { font-size: 16px; margin: 0 0 16px; }
+.now-playing__queue-list { padding: 0; margin: 0; list-style: none; }
+.now-playing__queue-track { display: flex; align-items: center; gap: 12px; padding: 10px 0; }
+.now-playing__queue-cover { flex: 0 0 44px; height: 44px; border-radius: 8px; overflow: hidden; background: var(--surface); display: grid; place-items: center; }
+.now-playing__queue-cover img { width: 100%; height: 100%; object-fit: cover; }
+.now-playing__queue-info { min-width: 0; display: grid; gap: 4px; }
+.now-playing__queue-title, .now-playing__queue-artist { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.now-playing__queue-artist, .now-playing__queue-empty { font-size: 13px; color: var(--muted); }
 .now-playing__heading { text-align: center; margin: 8px 0 32px; font-size: 13px; color: var(--muted); }
 .now-playing__content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 28px; max-width: 420px; margin: auto; }
 .now-playing .player__track { display: grid; gap: 24px; cursor: default; }
@@ -395,6 +406,9 @@ button { border: 0; }
 .now-playing .play-button { width: 64px; height: 64px; }
 .now-playing .player__right { display: grid; gap: 20px; }
 .now-playing .volume { display: flex; }
+@media (max-width: 760px), (hover: none) and (pointer: coarse) {
+  .now-playing .volume { display: none; }
+}
 .now-playing .icon-button { width: 44px; height: 44px; }
 @media (max-height: 700px) {
   .now-playing__heading { margin-bottom: 16px; }
